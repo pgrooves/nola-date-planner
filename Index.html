@@ -1,0 +1,3484 @@
+<!DOCTYPE html>
+<!--
+  NOLA Date Night Planner
+  
+  GITHUB PAGES DEPLOYMENT:
+  1. Create a new GitHub repository
+  2. Upload this file (rename to index.html)
+  3. Go to Settings > Pages
+  4. Select "Deploy from a branch" > main > / (root)
+  5. Your site will be live at: https://YOUR-USERNAME.github.io/REPO-NAME/
+  
+  That's it! No build process needed - this is a single static HTML file.
+  
+  The Mapbox API key is already configured and ready to use.
+  Free tier: 100,000 API calls/month (more than enough for personal use)
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NOLA Date Night Planner</title>
+<script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+<link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream: #F5F0E8; --ink: #1A1612; --rust: #C4622D; --sage: #7A8C6E;
+  --gold: #C9A84C; --muted: #8A7E72; --pale: #EDE7DA;
+  --border: rgba(26,22,18,0.13); --rust-pale: rgba(196,98,45,0.08);
+  --rust-mid: rgba(196,98,45,0.2); --surface: #ffffff; --surface-alt: #F5F0E8;
+}
+body.dark {
+  --cream: #18140F; --ink: #EDE7DA; --rust: #D4733A; --sage: #8FA882;
+  --gold: #C9A84C; --muted: #6B6058; --pale: #221D17;
+  --border: rgba(237,231,218,0.1); --rust-pale: rgba(212,115,58,0.1);
+  --rust-mid: rgba(212,115,58,0.25); --surface: #221D17; --surface-alt: #18140F;
+}
+.budget-tracker, .travel-tracker, .rec-card, .section-card, .step-wrapper { background: var(--surface); }
+body.dark::before { display: none; }
+body.dark { background: var(--cream); }
+
+.theme-bar { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-bottom:28px; }
+.theme-label { font-size:9px; font-weight:400; letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--muted); user-select:none; transition:color 0.2s; }
+.theme-toggle { position:relative; width:40px; height:22px; cursor:pointer; flex-shrink:0; }
+.theme-toggle input { position:absolute; opacity:0; width:0; height:0; }
+.theme-track { position:absolute; inset:0; background:var(--border); border:1px solid var(--border);
+  transition:background 0.22s, border-color 0.22s; }
+.theme-toggle input:checked ~ .theme-track { background:var(--rust); border-color:var(--rust); }
+.theme-thumb { position:absolute; top:4px; left:4px; width:12px; height:12px;
+  background:var(--muted); transition:transform 0.22s, background 0.22s; }
+.theme-toggle input:checked ~ .theme-thumb { transform:translateX(18px); background:#fff; }
+.theme-toggle input:focus-visible ~ .theme-track { outline:2px solid var(--rust); outline-offset:2px; }
+
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+
+/* STICKY TRACKER - Updated order and added items */
+.sticky-tracker {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 16px; z-index: 100;
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.sticky-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 60px;
+}
+.sticky-item.divider {
+  width: 1px; height: 40px; background: var(--border); min-width: 1px;
+}
+.sticky-label {
+  font-size: 7px; font-weight: 500; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--muted);
+}
+.sticky-label.bold { font-weight: 700; color: var(--rust); }
+.sticky-value {
+  font-size: 13px; font-weight: 500; color: var(--rust);
+}
+
+/* MAP STATUS LED INDICATOR */
+.map-status {
+  display: flex; align-items: center; gap: 6px; padding: 4px 12px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted);
+}
+.map-led {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #dc3545; /* red default */
+  box-shadow: 0 0 4px rgba(220, 53, 69, 0.5);
+}
+.map-led.connected {
+  background: #28a745; /* green */
+  box-shadow: 0 0 4px rgba(40, 167, 69, 0.5);
+}
+
+/* INITIAL SETUP MODAL */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(26, 22, 18, 0.85);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; backdrop-filter: blur(4px);
+}
+.modal-overlay.hidden { display: none; }
+.modal-content {
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 40px; max-width: 500px; width: 90%;
+}
+.modal-title {
+  font-family: 'Playfair Display', serif; font-size: 2rem;
+  margin-bottom: 8px; color: var(--ink);
+}
+.modal-subtitle {
+  font-size: 11px; letter-spacing: 0.1em; color: var(--muted);
+  margin-bottom: 32px; text-transform: uppercase;
+}
+.modal-input-group {
+  margin-bottom: 20px;
+}
+.modal-label {
+  display: block; font-size: 10px; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+}
+.modal-input {
+  width: 100%; padding: 12px 16px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--ink);
+  font-family: 'DM Mono', monospace; font-size: 14px;
+}
+.modal-btn {
+  width: 100%; padding: 16px; border: 1px solid var(--ink);
+  background: var(--ink); color: white; font-size: 11px;
+  font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase;
+  cursor: pointer; font-family: 'DM Mono', monospace;
+  transition: all 0.2s; margin-top: 12px;
+}
+.modal-btn:hover { background: var(--rust); border-color: var(--rust); }
+
+/* SELECTION CHECKMARKS */
+.step-checkmarks {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-right: 12px;
+}
+.check-circle {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--border); background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; transition: all 0.2s;
+}
+.check-circle.checked-main {
+  border-color: #7A8C6E; background: #7A8C6E; color: white;
+}
+.check-circle.checked-plan-b {
+  border-color: #5B7C99; background: #5B7C99; color: white;
+  width: 16px; height: 16px; font-size: 10px;
+}
+
+/* STEP WRAPPER WITH CHECKMARKS */
+.step-wrapper-outer {
+  display: flex; align-items: flex-start; margin-bottom: 16px;
+}
+
+body { background:var(--cream); color:var(--ink); font-family:'DM Mono',monospace;
+  min-height:100vh; overflow-x:hidden; padding-top:70px; }
+body::before { content:''; position:fixed; inset:0;
+  background-image:radial-gradient(ellipse at 8% 12%, rgba(196,98,45,0.06) 0%, transparent 55%),
+    radial-gradient(ellipse at 92% 88%, rgba(122,140,110,0.07) 0%, transparent 55%);
+  pointer-events:none; z-index:0; }
+.app-wrapper { position:relative; z-index:1; max-width:760px; margin:0 auto; padding:48px 28px 80px; }
+
+@keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+.fade-up { animation: fadeUp 0.7s ease both; }
+
+.header { text-align:center; padding-bottom:40px; margin-bottom:40px; border-bottom:1px solid var(--border);
+  animation: fadeUp 0.6s ease both; }
+.header-eyebrow { font-size:10px; font-weight:300; letter-spacing:0.3em; text-transform:uppercase;
+  color:var(--rust); margin-bottom:14px; }
+.header h1 { font-family:'Playfair Display',serif; font-size:clamp(2.4rem,6vw,3.8rem);
+  font-weight:400; line-height:1.08; letter-spacing:-0.02em; color:var(--ink); margin-bottom:10px; }
+.header h1 em { font-style:italic; color:var(--rust); }
+.header p { font-size:11px; font-weight:300; letter-spacing:0.18em; color:var(--muted); }
+
+.trackers-container { display:flex; gap:16px; margin-bottom:32px; flex-wrap:wrap; }
+.budget-tracker, .travel-tracker { flex:1; min-width:280px; display:flex; align-items:center; gap:18px;
+  border:1px solid var(--border); padding:14px 20px; flex-wrap:wrap; }
+.tracker-label { font-size:9px; font-weight:500; letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--muted); white-space:nowrap; }
+.tracker-value { font-size:18px; font-weight:500; color:var(--rust); flex:1; text-align:right; }
+.budget-slider-wrap { flex:1; min-width:100px; display:flex; flex-direction:column; gap:5px; }
+.budget-slider-row { display:flex; align-items:center; gap:8px; }
+input[type="range"] { -webkit-appearance:none; appearance:none; flex:1; height:3px;
+  background:rgba(26,22,18,0.1); border-radius:0; outline:none; cursor:pointer; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px;
+  background:var(--rust); border-radius:0; cursor:pointer; transition:transform 0.15s; }
+input[type="range"]::-webkit-slider-thumb:hover { transform:scale(1.15); }
+input[type="range"]::-moz-range-thumb { width:14px; height:14px; background:var(--rust);
+  border-radius:0; border:none; cursor:pointer; transition:transform 0.15s; }
+input[type="range"]::-moz-range-thumb:hover { transform:scale(1.15); }
+.budget-val { font-size:13px; font-weight:500; color:var(--ink); min-width:45px; text-align:right; }
+.budget-caption { font-size:9px; font-weight:300; color:var(--muted); letter-spacing:0.05em; }
+
+.section-card { border:1px solid var(--border); padding:28px; margin-bottom:20px; }
+.section-title { font-size:10px; font-weight:500; letter-spacing:0.25em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:18px; }
+
+/* TIME INPUTS */
+.time-inputs {
+  display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 24px; padding: 20px; border: 1px solid var(--border); background: var(--surface);
+}
+.time-group { display: flex; flex-direction: column; gap: 8px; }
+.time-label { font-size: 9px; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.time-input { padding: 8px 16px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--ink); font-family: 'DM Mono', monospace; font-size: 13px; }
+
+/* ROUTING STATUS INDICATOR */
+.routing-status {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 16px; margin: 16px auto; max-width: 400px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 10px; letter-spacing: 0.05em; color: var(--muted);
+}
+.routing-status.loading { border-color: var(--gold); color: var(--gold); }
+.routing-status.success { border-color: var(--sage); color: var(--sage); }
+.routing-status.error { border-color: var(--rust); color: var(--rust); }
+.routing-status-icon { width: 12px; height: 12px; }
+
+/* PLAN B SELECTION - Updated to be more prominent */
+.plan-b-toggle {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 12px 16px; margin-top: 16px;
+  border: 2px solid var(--rust); background: var(--rust-pale);
+  color: var(--rust); font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+  font-family: 'DM Mono', monospace;
+}
+.plan-b-toggle:hover { background: var(--rust); color: white; border-color: var(--rust); }
+.plan-b-section { margin-top: 20px; padding-top: 20px; border-top: 2px dashed var(--rust-mid); }
+.plan-b-label { font-size: 10px; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--rust); margin-bottom: 16px; }
+
+.chips-grid { display:flex; gap:10px; flex-wrap:wrap; }
+.chip { padding:6px 16px; border:1px solid var(--border); background:transparent; color:var(--ink);
+  font-size:11px; font-weight:400; letter-spacing:0.03em; cursor:pointer; transition:all 0.2s;
+  font-family:'DM Mono',monospace; }
+.chip:hover { border-color:var(--rust); }
+.chip.selected { background:var(--rust); color:white; border-color:var(--rust); }
+
+.steps-container { margin-bottom:32px; }
+.step-wrapper { 
+  border: 1px solid var(--border); 
+  margin-bottom: 20px; 
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+}
+.step-wrapper.dragging { opacity: 0.5; }
+.step-wrapper.drag-over { border-top: 3px solid var(--rust); }
+.step-header { padding:16px 18px; cursor:pointer; user-select:none;
+  display:grid;
+  grid-template-columns: 20px minmax(0,1fr) auto 20px;
+  align-items:center;
+  gap:10px;
+  border-bottom:1px solid var(--border); background:var(--surface-alt); }
+.step-header:hover { background:var(--rust-pale); }
+.step-drag-handle { cursor:grab; color:var(--muted); font-size:16px; flex-shrink:0; }
+.step-drag-handle:active { cursor:grabbing; }
+
+.step-info-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.step-number { font-size:10px; font-weight:500; letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--muted); white-space:nowrap; }
+.step-type-selector { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.step-type-label { font-size:8px; font-weight:500; letter-spacing:0.15em; text-transform:uppercase;
+  color:var(--muted); }
+.step-type-select { padding:4px 10px; border:1px solid var(--border); background:var(--surface);
+  color:var(--ink); font-family:'DM Mono',monospace; font-size:10px; cursor:pointer; }
+.step-duration-input { display:flex; align-items:center; gap:6px; }
+.step-duration-input label { font-size:8px; font-weight:500; letter-spacing:0.15em;
+  text-transform:uppercase; color:var(--muted); }
+.step-duration-input input { width:50px; padding:4px 8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); font-family:'DM Mono',monospace; font-size:10px; text-align:center; }
+
+.step-controls-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+}
+.step-controls { display:flex; gap:6px; }
+.step-btn { padding:4px 10px; border:1px solid var(--border); background:transparent; color:var(--ink);
+  font-size:10px; font-weight:400; cursor:pointer; font-family:'DM Mono',monospace; transition:all 0.2s; }
+.step-btn:hover { border-color:var(--rust); background:var(--rust-pale); }
+.step-btn.delete { color:var(--rust); }
+.step-btn.delete:hover { background:var(--rust); color:white; }
+.step-expand-icon { color:var(--muted); font-size:14px; transition:transform 0.3s; flex-shrink:0; justify-self:end; }
+.step-wrapper.expanded .step-expand-icon { transform:rotate(180deg); }
+.step-content { max-height:0; overflow:hidden; transition:max-height 0.3s ease; }
+.step-wrapper.expanded .step-content { max-height:3000px; }
+.step-body { padding:28px; }
+
+.step-selected-item { padding:16px; border:1px solid var(--border); background:var(--rust-pale); margin-bottom:20px; }
+.step-selected-name { font-size:16px; font-weight:500; color:var(--ink); margin-bottom:8px; }
+.step-selected-details { font-size:11px; color:var(--muted); margin-bottom:12px; }
+.step-selected-links { display:flex; gap:8px; flex-wrap:wrap; }
+.step-selected-link { padding:4px 10px; border:1px solid var(--border); background:var(--surface);
+  color:var(--ink); font-size:10px; text-decoration:none; transition:all 0.2s; }
+.step-selected-link:hover { border-color:var(--rust); background:var(--rust-pale); }
+
+.step-shuffle-btn { width:100%; padding:12px; border:1px solid var(--border); background:transparent;
+  color:var(--ink); font-size:11px; font-weight:500; letter-spacing:0.1em; text-transform:uppercase;
+  cursor:pointer; font-family:'DM Mono',monospace; margin-bottom:20px; transition:all 0.2s; }
+.step-shuffle-btn:hover { border-color:var(--rust); background:var(--rust-pale); }
+
+.add-step-btn { width:100%; padding:16px; border:1px dashed var(--border); background:transparent;
+  color:var(--muted); font-size:11px; font-weight:500; letter-spacing:0.15em; text-transform:uppercase;
+  cursor:pointer; font-family:'DM Mono',monospace; margin-bottom:32px; transition:all 0.2s; }
+.add-step-btn:hover { border-color:var(--rust); color:var(--rust); background:var(--rust-pale); }
+
+.recs-grid { 
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.recs-grid::-webkit-scrollbar { height: 8px; }
+.recs-grid::-webkit-scrollbar-track { background: var(--surface); border: 1px solid var(--border); }
+.recs-grid::-webkit-scrollbar-thumb { background: var(--rust); border-radius: 4px; }
+.recs-grid::-webkit-scrollbar-thumb:hover { background: var(--ink); }
+.rec-card { 
+  border: 1px solid var(--border); 
+  padding: 20px; 
+  cursor: pointer; 
+  transition: all 0.25s; 
+  position: relative;
+  min-width: 280px;
+  max-width: 320px;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+}
+.rec-card:hover { border-color:var(--rust); box-shadow:0 6px 18px rgba(26,22,18,0.08); transform:translateY(-2px); }
+.rec-card.selected { border-color:var(--rust); background:var(--rust-pale); }
+.rec-name { font-size:15px; font-weight:500; color:var(--ink); margin-bottom:6px; }
+.rec-sub { font-size:10px; font-weight:300; color:var(--muted); letter-spacing:0.05em; margin-bottom:12px; }
+.rec-desc { font-size:11px; line-height:1.55; color:var(--ink); margin-bottom:14px; }
+.rec-tags { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.rec-tag { padding:3px 8px; font-size:9px; font-weight:400; letter-spacing:0.05em; text-transform:uppercase;
+  border:1px solid var(--border); color:var(--muted); }
+.rec-tag.tag-rust { border-color:var(--rust); color:var(--rust); }
+.rec-tag.tag-sage { border-color:var(--sage); color:var(--sage); }
+.rec-tag.tag-gold { border-color:var(--gold); color:var(--gold); }
+.rec-links { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid var(--border); }
+.rec-link { padding:4px 10px; border:1px solid var(--border); background:var(--surface); color:var(--ink);
+  font-size:9px; text-decoration:none; transition:all 0.2s; letter-spacing:0.05em; text-transform:uppercase; }
+.rec-link:hover { border-color:var(--rust); background:var(--rust-pale); }
+
+.btn { padding:14px 28px; border:1px solid var(--ink); background:var(--ink); color:white;
+  font-size:10px; font-weight:500; letter-spacing:0.25em; text-transform:uppercase; cursor:pointer;
+  transition:all 0.2s; font-family:'DM Mono',monospace; }
+.btn:hover { background:var(--rust); border-color:var(--rust); }
+.btn:disabled { background:var(--pale); border-color:var(--pale); color:var(--muted); cursor:not-allowed; opacity:0.5; }
+.btn-secondary { background:transparent; color:var(--ink); border-color:var(--border); }
+.btn-secondary:hover { background:var(--rust-pale); border-color:var(--rust); color:var(--rust); }
+.btn-row { display:flex; gap:12px; flex-wrap:wrap; margin-top:28px; }
+
+#screen-final { display:none; }
+#screen-final.active { display:block; }
+.itinerary-header { border-bottom:1px solid var(--border); padding-bottom:24px; margin-bottom:32px; }
+.itinerary-meta { font-size:10px; font-weight:300; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; }
+.itinerary-meta strong { font-weight:500; color:var(--rust); }
+.itinerary-timeline { margin-bottom:40px; }
+
+.it-stop { display:grid; grid-template-columns:80px 32px 1fr; gap:20px; margin-bottom:40px; }
+.it-stop-last { margin-bottom:0; }
+.it-time { text-align:right; padding-top:2px; }
+.it-time-main { font-size:24px; font-weight:500; color:var(--ink); line-height:1; }
+.it-time-ampm { font-size:10px; font-weight:300; color:var(--muted); letter-spacing:0.1em; }
+.it-connector { display:flex; flex-direction:column; align-items:center; padding-top:8px; }
+.it-dot { width:12px; height:12px; border:2px solid var(--rust); background:var(--cream); margin-bottom:8px; flex-shrink:0; }
+.it-line { width:1px; flex:1; background:var(--border); }
+
+.it-body { padding-top:2px; }
+.it-num { font-size:9px; font-weight:500; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.it-name { font-size:20px; font-weight:500; color:var(--ink); margin-bottom:6px; }
+.it-sub { font-size:11px; font-weight:300; color:var(--muted); letter-spacing:0.05em; margin-bottom:12px; }
+.it-desc { font-size:12px; line-height:1.6; color:var(--ink); margin-bottom:10px; }
+.it-note { font-size:11px; line-height:1.55; color:var(--muted); font-style:italic; margin-bottom:14px; }
+.it-tags { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+.it-tag { padding:4px 10px; font-size:9px; font-weight:400; letter-spacing:0.05em; text-transform:uppercase;
+  border:1px solid var(--border); color:var(--muted); }
+.it-tag.tag-rust { border-color:var(--rust); color:var(--rust); }
+.it-tag.tag-sage { border-color:var(--sage); color:var(--sage); }
+.it-tag.tag-gold { border-color:var(--gold); color:var(--gold); }
+.it-tag.tag-muted { border-color:var(--muted); color:var(--muted); }
+
+.it-links { display:flex; gap:8px; flex-wrap:wrap; }
+.it-btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border:1px solid var(--border);
+  background:transparent; color:var(--ink); font-size:10px; font-weight:400; text-decoration:none;
+  transition:all 0.2s; font-family:'DM Mono',monospace; }
+.it-btn:hover { border-color:var(--rust); background:var(--rust-pale); }
+.it-btn svg { width:14px; height:14px; }
+.it-btn-web:hover { color:var(--rust); }
+.it-btn-map:hover { color:var(--sage); }
+.it-btn-dir:hover { color:var(--gold); }
+
+.it-travel-time { display:flex; align-items:center; gap:8px; padding:12px 16px; background:var(--rust-pale);
+  border:1px solid var(--rust-mid); margin-bottom:16px; font-size:11px; color:var(--muted); }
+.it-travel-time svg { width:16px; height:16px; color:var(--rust); }
+
+.cost-breakdown { border:1px solid var(--border); padding:24px; background:var(--surface); }
+.cost-breakdown-title { font-size:10px; font-weight:500; letter-spacing:0.25em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:18px; }
+.cost-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); font-size:11px; }
+.cost-row-label { color:var(--ink); }
+.cost-row-val { font-weight:500; color:var(--muted); }
+.cost-row-total { border-bottom:none; padding-top:16px; margin-top:8px; border-top:2px solid var(--border); }
+.cost-row-total .cost-row-label { font-weight:500; font-size:12px; }
+.cost-row-total .cost-row-val { font-size:18px; color:var(--rust); }
+
+.cost-bar-outer { width:100%; height:6px; background:rgba(26,22,18,0.08); margin:16px 0 8px; }
+.cost-bar-inner { height:100%; background:var(--rust); transition:width 0.4s; }
+.cost-bar-labels { display:flex; justify-content:space-between; font-size:9px; color:var(--muted); }
+
+.toast { position:fixed; bottom:32px; left:50%; transform:translateX(-50%) translateY(100px);
+  padding:14px 24px; background:var(--ink); color:white; font-size:11px; font-weight:400;
+  letter-spacing:0.05em; opacity:0; transition:all 0.3s; z-index:1000; pointer-events:none; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* PLAN B PROMPT OVERLAY */
+.plan-b-prompt {
+  margin-top: 20px;
+  padding: 24px;
+  border: 2px solid var(--rust);
+  background: var(--rust-pale);
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+.plan-b-prompt-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.plan-b-prompt-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.plan-b-prompt-btn {
+  padding: 12px 24px;
+  border: 2px solid var(--rust);
+  background: var(--rust);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-family: 'DM Mono', monospace;
+  transition: all 0.2s;
+}
+.plan-b-prompt-btn:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* MOBILE RESPONSIVE */
+@media (max-width: 768px) {
+  .app-wrapper {
+    padding: 32px 16px 60px;
+  }
+  
+  .sticky-tracker {
+    font-size: 9px;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  
+  .sticky-item {
+    min-width: 50px;
+  }
+  
+  .sticky-label {
+    font-size: 6px;
+  }
+  
+  .sticky-value {
+    font-size: 11px;
+  }
+  
+  .step-header {
+    padding: 12px;
+    gap: 8px;
+  }
+  
+  .step-info-wrap {
+    gap: 8px;
+  }
+  
+  .step-controls {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  
+  .step-btn {
+    font-size: 9px;
+    padding: 3px 8px;
+  }
+  
+  .rec-card {
+    min-width: 260px;
+    max-width: 280px;
+  }
+  
+  .plan-b-prompt {
+    padding: 16px;
+  }
+  
+  .plan-b-prompt-text {
+    font-size: 13px;
+  }
+}
+</style>
+</head>
+<body>
+<div class="sticky-tracker">
+  <div class="map-status">
+    <div class="map-led" id="mapLed"></div>
+    <span>Map Status</span>
+  </div>
+  
+  <div class="sticky-item">
+    <div class="sticky-label">Total Cost</div>
+    <div class="sticky-value" id="stickyCost">$0</div>
+  </div>
+  <div class="sticky-item">
+    <div class="sticky-label">Time Away</div>
+    <div class="sticky-value" id="stickyTimeAway">0h 0m</div>
+  </div>
+  <div class="sticky-item">
+    <div class="sticky-label">Drive Time</div>
+    <div class="sticky-value" id="stickyDriveTime">0 min</div>
+  </div>
+  
+  <div class="sticky-item divider"></div>
+  
+  <div class="sticky-item">
+    <div class="sticky-label bold">Leave Home</div>
+    <div class="sticky-value" id="stickyLeave">--:--</div>
+  </div>
+  <div class="sticky-item">
+    <div class="sticky-label">Arrive First</div>
+    <div class="sticky-value" id="stickyArriveFirst">--:--</div>
+  </div>
+  <div class="sticky-item">
+    <div class="sticky-label">Leave Last</div>
+    <div class="sticky-value" id="stickyLeaveLast">--:--</div>
+  </div>
+  <div class="sticky-item">
+    <div class="sticky-label bold">Arrive Home</div>
+    <div class="sticky-value" id="stickyArriveHome">--:--</div>
+  </div>
+</div>
+
+<!-- Initial Setup Modal -->
+<div class="modal-overlay" id="setupModal">
+  <div class="modal-content">
+    <div class="modal-title">Let's Plan Your Date</div>
+    <div class="modal-subtitle">Just a few quick details</div>
+    
+    <div class="modal-input-group">
+      <label class="modal-label">Where are you leaving from?</label>
+      <input type="text" class="modal-input" id="modalStartLocation" placeholder="e.g., French Quarter, Garden District" value="French Quarter, New Orleans">
+    </div>
+    
+    <div class="modal-input-group">
+      <label class="modal-label">What time are you leaving?</label>
+      <input type="time" class="modal-input" id="modalStartTime" value="18:00">
+    </div>
+    
+    <div class="modal-input-group">
+      <label class="modal-label">What time do you want to be home?</label>
+      <input type="time" class="modal-input" id="modalEndTime" value="23:00">
+    </div>
+    
+    <button class="modal-btn" onclick="closeSetupModal()">Start Planning →</button>
+  </div>
+</div>
+
+<div class="app-wrapper">
+  <div class="theme-bar">
+    <span class="theme-label">Light</span>
+    <label class="theme-toggle">
+      <input type="checkbox" id="darkModeToggle">
+      <span class="theme-track"></span>
+      <span class="theme-thumb"></span>
+    </label>
+    <span class="theme-label">Dark</span>
+  </div>
+
+  <div id="screen-main">
+    <header class="header">
+      <div class="header-eyebrow">Curated for Two</div>
+      <h1>Your Perfect <em>New Orleans</em> Date Night</h1>
+      <p>Build your ideal evening, step by step</p>
+    </header>
+
+    <!-- Hidden inputs for JS compatibility -->
+    <input type="hidden" id="startLocation" value="French Quarter, New Orleans">
+    <input type="hidden" id="startTime" value="18:00">
+    <input type="hidden" id="endTime" value="23:00">
+
+    <div class="trackers-container">
+      <div class="budget-tracker">
+        <span class="tracker-label">Budget Cap</span>
+        <div class="budget-slider-wrap">
+          <div class="budget-slider-row">
+            <input type="range" id="budgetSlider" min="100" max="1000" value="500" step="25">
+            <span class="budget-val" id="budgetMax">$500</span>
+          </div>
+          <div class="budget-caption">Estimated total for two</div>
+        </div>
+      </div>
+      
+      <div class="travel-tracker">
+        <span class="tracker-label">Travel Time</span>
+        <span class="tracker-value" id="travelTime">0 min</span>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-title">Set the Tone</div>
+      <div class="chips-grid" id="filterChips"></div>
+    </div>
+
+    <div class="steps-container" id="stepsContainer"></div>
+
+    <div class="routing-status" id="routingStatus" style="display:none;">
+      <span class="routing-status-icon">⟳</span>
+      <span id="routingStatusText">Calculating routes...</span>
+    </div>
+
+    <button class="add-step-btn" onclick="addStep()">+ Add Another Step</button>
+
+    <div class="btn-row">
+      <button class="btn" onclick="showFinal()">Review Itinerary</button>
+    </div>
+  </div>
+
+  <div id="screen-final">
+    <div class="itinerary-header">
+      <h2 style="font-family:'Playfair Display',serif; font-size:2.2rem; font-weight:400; margin-bottom:14px;">Your Itinerary</h2>
+      <div class="itinerary-meta">
+        <strong id="itinerary-cost">$0</strong> estimated for two &nbsp;·&nbsp;
+        <span id="itinerary-neighborhoods"></span> &nbsp;·&nbsp;
+        <span id="itinerary-travel">0 min travel</span>
+      </div>
+    </div>
+
+    <div class="itinerary-timeline" id="itinerary-stops"></div>
+
+    <div class="cost-breakdown">
+      <div class="cost-breakdown-title">Cost Breakdown</div>
+      <div id="itinerary-costs"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="downloadPDF()">Download Plan</button>
+      <button class="btn-secondary btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+      <button class="btn-secondary btn" onclick="resetPlanner()">Start Over</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================
+// MAPBOX API CONFIGURATION
+// ============================================
+// Get your free API key at: https://account.mapbox.com/access-tokens/
+// Paste your Mapbox API token here:
+const MAPBOX_API_KEY = 'pk.eyJ1IjoibWFuLXRpbSIsImEiOiJjbW5qZDl3YTcwb2t3MnBwdTJ1dHNxeDJqIn0.HU1SUeYtg60jktlQ0hQsOw';
+
+// Mapbox Directions API endpoint
+const MAPBOX_DIRECTIONS_URL = 'https://api.mapbox.com/directions/v5/mapbox/driving';
+
+// ============================================
+// END CONFIGURATION
+// ============================================
+
+document.getElementById('darkModeToggle').addEventListener('change', (e) => {
+  document.body.classList.toggle('dark', e.target.checked);
+});
+
+function closeSetupModal() {
+  const startLoc = document.getElementById('modalStartLocation').value;
+  const startTime = document.getElementById('modalStartTime').value;
+  const endTime = document.getElementById('modalEndTime').value;
+  
+  // Transfer to hidden inputs
+  document.getElementById('startLocation').value = startLoc;
+  document.getElementById('startTime').value = startTime;
+  document.getElementById('endTime').value = endTime;
+  
+  // Update state
+  state.startLocation = startLoc;
+  state.startTime = startTime;
+  state.endTime = endTime;
+  
+  // Hide modal
+  document.getElementById('setupModal').classList.add('hidden');
+  
+  // Update trackers
+  updateTrackers();
+}
+
+let state = {
+  steps: [],
+  nextStepId: 1,
+  selectedFilters: [],
+  budgetMax: 500,
+  startTime: '18:00',
+  endTime: '23:00',
+  startLocation: 'French Quarter, New Orleans',
+  travelTimeCache: {},
+  mapConnected: false
+};
+
+const STEP_TYPES = {
+  activity: { label: 'Activity', defaultDuration: 120, category: 'activity' },
+  coffee: { label: 'Coffee', defaultDuration: 45, category: 'coffee' },
+  lunch: { label: 'Lunch', defaultDuration: 75, category: 'lunch' },
+  dinner: { label: 'Dinner', defaultDuration: 120, category: 'dinner' },
+  drinks: { label: 'Drinks', defaultDuration: 90, category: 'drinks' },
+  snacks: { label: 'Snacks/Dessert/Other', defaultDuration: 45, category: 'snacks' }
+};
+
+const FILTERS = [
+  { id: 'indoor', label: 'Indoor', type: 'setting' },
+  { id: 'outdoor', label: 'Outdoor', type: 'setting' },
+  { id: 'romantic', label: 'Romantic', type: 'vibe' },
+  { id: 'casual', label: 'Casual', type: 'vibe' },
+  { id: 'upscale', label: 'Upscale', type: 'vibe' },
+  { id: 'lively', label: 'Lively', type: 'vibe' },
+  { id: 'quiet', label: 'Quiet', type: 'vibe' },
+  { id: 'seafood', label: 'Seafood', type: 'cuisine' },
+  { id: 'italian', label: 'Italian', type: 'cuisine' },
+  { id: 'french', label: 'French', type: 'cuisine' },
+  { id: 'creole', label: 'Creole', type: 'cuisine' },
+  { id: 'mexican', label: 'Mexican', type: 'cuisine' },
+  { id: 'american', label: 'American', type: 'cuisine' },
+  { id: 'asian', label: 'Asian', type: 'cuisine' },
+  { id: 'vegan', label: 'Vegan Options', type: 'dietary' },
+  { id: 'gluten-free', label: 'Gluten-Free', type: 'dietary' }
+];
+
+const RECS = {
+  // ACTIVITIES - Note: food tags removed as requested
+  act1: {
+    id: 'act1', name: 'Snug Harbor Jazz Bistro', hood: 'Frenchmen Street', type: 'activity',
+    desc: 'Intimate Frenchmen Street venue featuring world-class jazz musicians. The acoustics are exceptional and no cover charge before 9 PM on most nights.',
+    costLabel: '$20-40/person', costVal: 30, url: 'https://www.snugjazz.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Snug+Harbor+New+Orleans',
+    tags: ['live-music', 'jazz'], lat: 29.9645, lng: -90.0604,
+    filters: ['indoor', 'romantic', 'lively']
+  },
+  act2: {
+    id: 'act2', name: 'Café Du Monde', hood: 'French Quarter', type: 'activity',
+    desc: 'Iconic 24-hour café serving powdered sugar-dusted beignets and chicory café au lait. Magical at 11 PM when the tourist crush dies down.',
+    costLabel: '$10-20/person', costVal: 15, url: 'https://www.cafedumonde.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Cafe+Du+Monde+New+Orleans',
+    tags: ['historic', 'late-night'], lat: 29.9575, lng: -90.0623,
+    filters: ['indoor', 'casual']
+  },
+  act3: {
+    id: 'act3', name: 'Frenchmen Street Art Market', hood: 'Frenchmen Street', type: 'activity',
+    desc: 'Open-air night market featuring local artists selling handmade jewelry, art, and crafts. Perfect romantic stroll between live music venues.',
+    costLabel: '$20-40/person', costVal: 30, url: 'https://www.frenchmenartmarket.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Frenchmen+Street+Market+New+Orleans',
+    tags: ['outdoor', 'art', 'shopping'], lat: 29.9641, lng: -90.0585,
+    filters: ['outdoor', 'casual', 'romantic']
+  },
+  act4: {
+    id: 'act4', name: 'Preservation Hall', hood: 'French Quarter', type: 'activity',
+    desc: 'Legendary intimate jazz venue in the heart of the French Quarter. Traditional New Orleans jazz in standing-room shows lasting 45 minutes.',
+    costLabel: '$25-45/person', costVal: 35, url: 'https://www.preservationhall.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Preservation+Hall+New+Orleans',
+    tags: ['live-music', 'jazz', 'historic'], lat: 29.9594, lng: -90.0644,
+    filters: ['indoor', 'romantic', 'lively']
+  },
+  act5: {
+    id: 'act5', name: 'Steamboat Natchez Jazz Cruise', hood: 'French Quarter', type: 'activity',
+    desc: 'Evening jazz cruise on an authentic paddlewheel steamboat with live Dixieland jazz and stunning Mississippi River views.',
+    costLabel: '$40-60/person', costVal: 50, url: 'https://www.steamboatnatchez.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Steamboat+Natchez+New+Orleans',
+    tags: ['cruise', 'live-music'], lat: 29.9511, lng: -90.0637,
+    filters: ['outdoor', 'romantic', 'lively', 'upscale']
+  },
+  act6: {
+    id: 'act6', name: 'City Park Sculpture Garden', hood: 'City Park', type: 'activity',
+    desc: 'Stunning outdoor sculpture garden featuring works by modern masters with beautiful walking paths and a serene lagoon.',
+    costLabel: '$15-25/person', costVal: 20, url: 'https://noma.org/visit/sculpture-garden',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=New+Orleans+Museum+of+Art+Sculpture+Garden',
+    tags: ['outdoor', 'art'], lat: 29.9878, lng: -90.0928,
+    filters: ['outdoor', 'romantic', 'quiet']
+  },
+  act7: {
+    id: 'act7', name: 'Moonwalk Riverfront', hood: 'French Quarter', type: 'activity',
+    desc: 'Romantic riverside promenade along the Mississippi with benches, street performers, and stunning sunset views. Free and always open.',
+    costLabel: '$0-10/person', costVal: 5, url: 'https://www.neworleans.com/things-to-do/attractions/moonwalk',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Moonwalk+New+Orleans',
+    tags: ['outdoor', 'waterfront', 'free'], lat: 29.9516, lng: -90.0608,
+    filters: ['outdoor', 'romantic', 'quiet', 'casual']
+  },
+  act8: {
+    id: 'act8', name: 'Audubon Park', hood: 'Uptown', type: 'activity',
+    desc: 'Beautiful urban park with Spanish moss-draped oak trees, walking paths, and lagoons. Perfect sunset stroll before dinner.',
+    costLabel: '$0-10/person', costVal: 5, url: 'https://audubonnatureinstitute.org/audubon-park',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Audubon+Park+New+Orleans',
+    tags: ['outdoor', 'nature', 'free'], lat: 29.9272, lng: -90.1285,
+    filters: ['outdoor', 'romantic', 'quiet', 'casual']
+  },
+  act9: {
+    id: 'act9', name: 'Tipitina\'s', hood: 'Uptown', type: 'activity',
+    desc: 'Legendary live music venue that shaped New Orleans music history. Intimate room with amazing acoustics featuring local and touring acts.',
+    costLabel: '$25-45/person', costVal: 35, url: 'https://www.tipitinas.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Tipitinas+New+Orleans',
+    tags: ['live-music', 'historic'], lat: 29.9367, lng: -90.1278,
+    filters: ['indoor', 'lively', 'casual']
+  },
+  act10: {
+    id: 'act10', name: 'Crescent Park', hood: 'Bywater', type: 'activity',
+    desc: 'Waterfront park along the Mississippi River with stunning city skyline views. Great for sunset walks with riverside seating areas.',
+    costLabel: '$0-10/person', costVal: 5, url: 'https://www.crescentparknola.org',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Crescent+Park+New+Orleans',
+    tags: ['outdoor', 'waterfront', 'free'], lat: 29.9678, lng: -90.0389,
+    filters: ['outdoor', 'romantic', 'quiet', 'casual']
+  },
+  act11: {
+    id: 'act11', name: 'Bacchanal Wine', hood: 'Bywater', type: 'activity',
+    desc: 'This hidden gem in Bywater is the kind of place locals guard fiercely. Walk through what looks like a regular wine shop to discover a magical back courtyard lit with string lights, where live music plays every night under ancient oak trees. Order wine by the glass from the front (they have an incredible selection), grab small plates from the kitchen, and settle into the garden. The vibe is effortlessly cool without trying - you\'ll see neighborhood regulars, couples on dates, and groups of friends all mixing together. It\'s one of those quintessentially New Orleans experiences that feels like a secret even though it\'s been around for years.',
+    costLabel: '$25-45/person', costVal: 35, url: 'https://www.bacchanalwine.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Bacchanal+Wine+600+Poland+Ave+New+Orleans',
+    tags: ['wine', 'live-music', 'garden'], lat: 29.9683, lng: -90.0286,
+    filters: ['outdoor', 'casual', 'romantic', 'lively']
+  },
+  act12: {
+    id: 'act12', name: 'The Starlight Lounge', hood: 'Bywater', type: 'activity',
+    desc: 'This tiny neighborhood bar on St. Claude is exactly the kind of dive that makes New Orleans special. There\'s a shuffleboard table, cheap drinks, and a jukebox with an impeccable selection. The bartenders are characters, the regulars are friendly, and there\'s no pretense whatsoever. It\'s the anti-tourist bar - you won\'t find bachelorette parties here, just people who love good music, strong drinks, and genuine conversation. Shows up on every local\'s list of favorite hidden bars.',
+    costLabel: '$15-30/person', costVal: 23, url: 'https://www.facebook.com/TheStarlightBywater',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Starlight+3125+St+Claude+Ave+New+Orleans',
+    tags: ['dive-bar', 'local', 'shuffleboard'], lat: 29.9667, lng: -90.0311,
+    filters: ['indoor', 'casual', 'lively']
+  },
+
+  // COFFEE SHOPS
+  cof1: {
+    id: 'cof1', name: 'Spitfire Coffee', hood: 'French Quarter', type: 'coffee',
+    desc: 'This cozy corner café on the quieter end of the French Quarter is where locals escape the Bourbon Street chaos. The espresso is consistently excellent - pulled by baristas who actually know what they\'re doing - and the pastries are baked fresh daily by a local baker. There\'s a small outdoor patio perfect for people-watching, and the interior has that lived-in coffee shop charm with mismatched furniture and local art on the walls. It\'s the kind of place where neighborhood residents come for their morning coffee and end up staying to work on their laptops because the WiFi is free and the vibe is just right.',
+    costLabel: '$8-15/person', costVal: 12, url: 'https://www.spitfirecoffee.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Spitfire+Coffee+627+St+Peter+St+New+Orleans',
+    tags: ['coffee', 'pastries', 'casual'], lat: 29.9583, lng: -90.0650,
+    filters: ['indoor', 'outdoor', 'casual', 'quiet']
+  },
+  cof2: {
+    id: 'cof2', name: 'French Truck Coffee', hood: 'Garden District', type: 'coffee',
+    desc: 'Locally roasted coffee in charming setting. Known for their cortados and friendly baristas. Multiple locations across the city.',
+    costLabel: '$8-15/person', costVal: 12, url: 'https://www.frenchtruckcoffee.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=French+Truck+Coffee+New+Orleans',
+    tags: ['coffee', 'local', 'casual'], lat: 29.9311, lng: -90.0845,
+    filters: ['indoor', 'casual']
+  },
+  cof3: {
+    id: 'cof3', name: 'HiVolt Coffee', hood: 'Bywater', type: 'coffee',
+    desc: 'Hip neighborhood café with excellent coffee, pastries, and light fare. Popular with locals for morning meetings and afternoon work.',
+    costLabel: '$8-15/person', costVal: 12, url: 'https://www.hivoltcoffee.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=HiVolt+Coffee+New+Orleans',
+    tags: ['coffee', 'pastries', 'casual'], lat: 29.9689, lng: -90.0318,
+    filters: ['indoor', 'casual', 'quiet']
+  },
+  cof4: {
+    id: 'cof4', name: 'Congregation Coffee Roasters', hood: 'Garden District', type: 'coffee',
+    desc: 'Beautiful space with locally roasted coffee and excellent pastries. The almond croissants are legendary among locals.',
+    costLabel: '$10-18/person', costVal: 14, url: 'https://www.congregationcoffee.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Congregation+Coffee+New+Orleans',
+    tags: ['coffee', 'pastries', 'upscale'], lat: 29.9339, lng: -90.0872,
+    filters: ['indoor', 'upscale', 'quiet', 'vegan', 'gluten-free']
+  },
+  cof5: {
+    id: 'cof5', name: 'Mojo Coffee', hood: 'Mid-City', type: 'coffee',
+    desc: 'Local roaster with multiple locations serving exceptional coffee. The cold brew is smooth and the vibe is consistently welcoming.',
+    costLabel: '$8-14/person', costVal: 11, url: 'https://www.mojocoffee.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mojo+Coffee+New+Orleans',
+    tags: ['coffee', 'local'], lat: 29.9722, lng: -90.0889,
+    filters: ['indoor', 'casual']
+  },
+  cof6: {
+    id: 'cof6', name: 'Merchant House Coffee', hood: 'Magazine Street', type: 'coffee',
+    desc: 'Specialty coffee roastery with beautiful industrial space. Excellent pour-over options and knowledgeable baristas.',
+    costLabel: '$9-16/person', costVal: 13, url: 'https://www.merchantcoffee.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Merchant+House+Coffee+New+Orleans',
+    tags: ['coffee', 'specialty'], lat: 29.9289, lng: -90.0911,
+    filters: ['indoor', 'upscale', 'quiet']
+  },
+  cof7: {
+    id: 'cof7', name: 'Backatown Coffee Parlour', hood: 'Mid-City', type: 'coffee',
+    desc: 'This small coffee shop on North Broad started as a pop-up and has grown into a neighborhood favorite through pure word-of-mouth. The owners are genuinely passionate about coffee - they source beans from independent roasters around the country and rotate their selection frequently. Their pour-overs are methodical and delicious, taking the time to do it right rather than rushing. The space itself is thoughtfully designed with plants everywhere, lots of natural light, and a few tables outside. It represents the new wave of Mid-City businesses run by people who genuinely love their neighborhood. You\'ll see everyone from construction workers grabbing morning coffee to remote workers camped out with laptops.',
+    costLabel: '$9-16/person', costVal: 13, url: 'https://www.backatowncoffeeparlour.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Backatown+Coffee+Parlour+3139+Ponce+de+Leon+St+New+Orleans',
+    tags: ['coffee', 'local', 'pour-over'], lat: 29.9661, lng: -90.0850,
+    filters: ['indoor', 'outdoor', 'casual', 'quiet']
+  },
+
+  // LUNCH OPTIONS
+  lun1: {
+    id: 'lun1', name: 'Cochon Butcher', hood: 'Warehouse District', type: 'lunch',
+    desc: 'Casual sandwich shop from the Cochon team serving house-cured meats and Louisiana specialties. The muffuletta and boudin are must-tries.',
+    costLabel: '$20-35/person', costVal: 28, url: 'https://www.cochonbutcher.com',
+    menuUrl: 'https://www.cochonbutcher.com/menu', mapUrl: 'https://maps.google.com/?q=Cochon+Butcher+New+Orleans',
+    tags: ['sandwich', 'casual', 'local'], lat: 29.9420, lng: -90.0741,
+    filters: ['indoor', 'casual', 'american', 'creole']
+  },
+  lun2: {
+    id: 'lun2', name: 'Casamento\'s Restaurant', hood: 'Uptown', type: 'lunch',
+    desc: 'Family-run oyster house since 1919 with white tile walls and the freshest Gulf oysters. Seasonal (closed summer) and worth the wait.',
+    costLabel: '$25-40/person', costVal: 33, url: 'https://www.casamentosrestaurant.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Casamentos+Restaurant+New+Orleans',
+    tags: ['seafood', 'oysters', 'historic'], lat: 29.9267, lng: -90.1087,
+    filters: ['indoor', 'casual', 'seafood']
+  },
+  lun3: {
+    id: 'lun3', name: 'Turkey and the Wolf', hood: 'Irish Channel', type: 'lunch',
+    desc: 'Bold, creative sandwiches that earned national attention. The fried bologna sandwich sounds crazy but tastes incredible. Expect a line.',
+    costLabel: '$20-35/person', costVal: 28, url: 'https://www.turkeyandthewolf.com',
+    menuUrl: 'https://www.turkeyandthewolf.com/menu', mapUrl: 'https://maps.google.com/?q=Turkey+and+the+Wolf+New+Orleans',
+    tags: ['sandwich', 'creative', 'casual'], lat: 29.9233, lng: -90.0925,
+    filters: ['indoor', 'casual', 'american', 'lively', 'vegan']
+  },
+  lun4: {
+    id: 'lun4', name: 'Parkway Bakery and Tavern', hood: 'Mid-City', type: 'lunch',
+    desc: 'Legendary po-boy shop in historic building. The roast beef po-boy is a rite of passage. Casual atmosphere with picnic tables.',
+    costLabel: '$18-30/person', costVal: 24, url: 'https://www.parkwaypoorboys.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Parkway+Bakery+New+Orleans',
+    tags: ['po-boy', 'casual', 'local'], lat: 29.9783, lng: -90.0742,
+    filters: ['indoor', 'outdoor', 'casual', 'american']
+  },
+  lun5: {
+    id: 'lun5', name: 'Compère Lapin', hood: 'Warehouse District', type: 'lunch',
+    desc: 'Chef Nina Compton\'s Caribbean-inspired cuisine in stylish setting. Lunch menu offers lighter versions of her celebrated dishes.',
+    costLabel: '$35-55/person', costVal: 45, url: 'https://www.comperelapin.com',
+    menuUrl: 'https://www.comperelapin.com/menus', mapUrl: 'https://maps.google.com/?q=Compere+Lapin+New+Orleans',
+    tags: ['caribbean', 'upscale', 'creative'], lat: 29.9464, lng: -90.0703,
+    filters: ['indoor', 'upscale', 'gluten-free']
+  },
+  lun6: {
+    id: 'lun6', name: 'Seed', hood: 'Lower Garden District', type: 'lunch',
+    desc: 'Fully plant-based restaurant with creative dishes that even meat-lovers rave about. The Gulf mushroom ceviche is a revelation.',
+    costLabel: '$30-45/person', costVal: 38, url: 'https://www.seedrestaurantnola.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Seed+New+Orleans',
+    tags: ['vegan', 'upscale', 'creative'], lat: 29.9316, lng: -90.0803,
+    filters: ['indoor', 'upscale', 'vegan', 'quiet', 'gluten-free']
+  },
+  lun7: {
+    id: 'lun7', name: 'Manolito', hood: 'Warehouse District', type: 'lunch',
+    desc: 'Cuban-inspired restaurant from Chef Alex Harrell serving elevated comfort food. The Cuban sandwich and plantain chips are exceptional.',
+    costLabel: '$25-40/person', costVal: 33, url: 'https://www.manolitonola.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Manolito+New+Orleans',
+    tags: ['cuban', 'casual', 'creative'], lat: 29.9447, lng: -90.0722,
+    filters: ['indoor', 'casual', 'lively']
+  },
+  lun8: {
+    id: 'lun8', name: 'Gris-Gris', hood: 'Lower Garden District', type: 'lunch',
+    desc: 'Modern take on Louisiana classics with emphasis on Gulf seafood. The fried Gulf fish and gumbo showcase Chef Eric Cook\'s expertise.',
+    costLabel: '$30-45/person', costVal: 38, url: 'https://www.grisgrisnola.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Gris-Gris+New+Orleans',
+    tags: ['seafood', 'creole', 'upscale'], lat: 29.9311, lng: -90.0789,
+    filters: ['indoor', 'upscale', 'seafood', 'creole', 'gluten-free']
+  },
+  lun9: {
+    id: 'lun9', name: 'Killer Poboys', hood: 'French Quarter', type: 'lunch',
+    desc: 'Don\'t let the tiny storefront fool you - this is where traditional po-boys meet modern creativity and the result is magic. The shrimp po-boy features cornmeal-fried Gulf shrimp with a spicy remoulade that has just the right kick, while the roast beef debris is slow-cooked for hours until it melts in your mouth. But they also do wild things like a smoked sweet potato po-boy with black garlic aioli that somehow works perfectly on French bread. There\'s usually a line, but it moves fast. Grab your sandwich and head to Jackson Square or the riverfront to eat. Reddit\'s r/NewOrleans consistently ranks this as one of the best po-boy spots that isn\'t trying to be your grandma\'s sandwich shop.',
+    costLabel: '$18-30/person', costVal: 24, url: 'https://www.killerpoboys.com',
+    menuUrl: 'https://www.killerpoboys.com/menu', mapUrl: 'https://maps.google.com/?q=Killer+Poboys+219+Dauphine+St+New+Orleans',
+    tags: ['po-boy', 'creative', 'casual'], lat: 29.9567, lng: -90.0669,
+    filters: ['indoor', 'casual', 'american', 'vegan']
+  },
+
+  // DINNER OPTIONS
+  din1: {
+    id: 'din1', name: 'Mosquito Supper Club', hood: 'Mid-City', type: 'dinner',
+    desc: 'Chef Melissa Martin grew up in the bayou country of southwest Louisiana, and this restaurant is her love letter to that culture. The tasting menu format (it\'s the only option) tells a story of her Cajun heritage through refined versions of dishes she grew up eating. You might get shrimp cooked in the style her grandmother taught her, or boudin made from her family\'s recipe but elevated with technique learned in fine dining kitchens. The dining room is intimate and warm, and Melissa often comes out to explain dishes herself. This isn\'t fusion or reinterpretation - it\'s authentic Cajun food treated with the respect it deserves. Book 2-3 weeks in advance.',
+    costLabel: '$80-120/person', costVal: 100, url: 'https://www.mosquitosupperclub.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mosquito+Supper+Club+1502+Constance+St+New+Orleans',
+    tags: ['cajun', 'tasting-menu', 'upscale'], lat: 29.9725, lng: -90.0895,
+    filters: ['indoor', 'upscale', 'romantic', 'seafood', 'creole', 'quiet']
+  },
+  din2: {
+    id: 'din2', name: 'Herbsaint', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Acclaimed bistro from the Link Restaurant Group serving refined French-Southern cuisine. The shrimp and grits and gumbo are legendary.',
+    costLabel: '$60-90/person', costVal: 75, url: 'https://www.herbsaint.com',
+    menuUrl: 'https://www.herbsaint.com/menus', mapUrl: 'https://maps.google.com/?q=Herbsaint+New+Orleans',
+    tags: ['french', 'bistro', 'upscale'], lat: 29.9467, lng: -90.0722,
+    filters: ['indoor', 'upscale', 'romantic', 'french', 'gluten-free']
+  },
+  din3: {
+    id: 'din3', name: 'Pêche Seafood Grill', hood: 'Warehouse District', type: 'dinner',
+    desc: 'James Beard Award-winning seafood restaurant with wood-burning grill. The whole grilled fish and oyster dishes are exceptional.',
+    costLabel: '$65-95/person', costVal: 80, url: 'https://www.pecherestaurant.com',
+    menuUrl: 'https://www.pecherestaurant.com/menu', mapUrl: 'https://maps.google.com/?q=Peche+Seafood+Grill+New+Orleans',
+    tags: ['seafood', 'upscale', 'grilled'], lat: 29.9432, lng: -90.0748,
+    filters: ['indoor', 'upscale', 'lively', 'seafood', 'gluten-free']
+  },
+  din4: {
+    id: 'din4', name: 'Coquette', hood: 'Garden District', type: 'dinner',
+    desc: 'Intimate neighborhood bistro with daily-changing menu highlighting seasonal ingredients. Romantic atmosphere with excellent wine pairings.',
+    costLabel: '$70-100/person', costVal: 85, url: 'https://www.coquettenola.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Coquette+New+Orleans',
+    tags: ['bistro', 'seasonal', 'romantic'], lat: 29.9313, lng: -90.0855,
+    filters: ['indoor', 'upscale', 'romantic', 'quiet', 'french', 'gluten-free']
+  },
+  din5: {
+    id: 'din5', name: 'Clancy\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Old-school Creole restaurant that\'s been a neighborhood favorite since 1946. The sweetbreads and oysters Rockefeller are legendary.',
+    costLabel: '$75-110/person', costVal: 93, url: 'https://www.clancysneworleans.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Clancys+New+Orleans',
+    tags: ['creole', 'classic', 'upscale'], lat: 29.9378, lng: -90.1189,
+    filters: ['indoor', 'upscale', 'romantic', 'creole']
+  },
+  din6: {
+    id: 'din6', name: 'Brigtsen\'s', hood: 'Riverbend', type: 'dinner',
+    desc: 'Intimate Creole restaurant in converted cottage. Chef Frank Brigtsen trained under Paul Prudhomme and serves refined Louisiana classics.',
+    costLabel: '$70-100/person', costVal: 85, url: 'https://www.brigtsens.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Brigtsens+New+Orleans',
+    tags: ['creole', 'cottage', 'romantic'], lat: 29.9489, lng: -90.1256,
+    filters: ['indoor', 'upscale', 'romantic', 'creole', 'quiet']
+  },
+  din7: {
+    id: 'din7', name: 'Marjie\'s Grill', hood: 'Broadmoor', type: 'dinner',
+    desc: 'Southeast Asian-Creole fusion in casual setting. Bold creative flavors with dishes like crawfish pad Thai and Vietnamese-style quail.',
+    costLabel: '$45-70/person', costVal: 58, url: 'https://www.marjiesgrill.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Marjies+Grill+New+Orleans',
+    tags: ['asian', 'fusion', 'casual'], lat: 29.9511, lng: -90.1056,
+    filters: ['indoor', 'casual', 'lively', 'asian', 'vegan', 'gluten-free']
+  },
+  din8: {
+    id: 'din8', name: 'Dante\'s Kitchen', hood: 'Riverbend', type: 'dinner',
+    desc: 'Neighborhood spot serving creative contemporary Creole cuisine with focus on local ingredients. The patio is lovely for evening dining.',
+    costLabel: '$55-85/person', costVal: 70, url: 'https://www.danteskitchen.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Dantes+Kitchen+New+Orleans',
+    tags: ['creole', 'contemporary', 'patio'], lat: 29.9528, lng: -90.1278,
+    filters: ['indoor', 'outdoor', 'upscale', 'romantic', 'creole']
+  },
+  din9: {
+    id: 'din9', name: 'Gabrielle', hood: 'Mid-City', type: 'dinner',
+    desc: 'The legendary restaurant that introduced slow-roasted duck to New Orleans has reopened. The duck remains as spectacular as ever.',
+    costLabel: '$65-95/person', costVal: 80, url: 'https://www.gabriellerestaurant.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Gabrielle+Restaurant+New+Orleans',
+    tags: ['creole', 'historic', 'upscale'], lat: 29.9667, lng: -90.0933,
+    filters: ['indoor', 'upscale', 'romantic', 'creole']
+  },
+  din10: {
+    id: 'din10', name: 'La Petite Grocery', hood: 'Uptown', type: 'dinner',
+    desc: 'Upscale neighborhood bistro in converted grocery store. The blue crab beignets are signature dish, and the ambiance is intimate.',
+    costLabel: '$70-100/person', costVal: 85, url: 'https://www.lapetitegrocery.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=La+Petite+Grocery+New+Orleans',
+    tags: ['bistro', 'upscale', 'romantic'], lat: 29.9311, lng: -90.1189,
+    filters: ['indoor', 'upscale', 'romantic', 'quiet', 'french', 'seafood']
+  },
+  din11: {
+    id: 'din11', name: 'Josephine Estelle', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Italian restaurant in the Ace Hotel serving wood-fired pizzas and handmade pastas. The rooftop bar is perfect for pre-dinner drinks.',
+    costLabel: '$50-75/person', costVal: 63, url: 'https://www.josephineestelle.com',
+    menuUrl: 'https://www.josephineestelle.com/menus', mapUrl: 'https://maps.google.com/?q=Josephine+Estelle+New+Orleans',
+    tags: ['italian', 'pizza', 'pasta'], lat: 29.9442, lng: -90.0678,
+    filters: ['indoor', 'upscale', 'italian', 'lively', 'vegan']
+  },
+  din12: {
+    id: 'din12', name: 'Superior Seafood', hood: 'Uptown', type: 'dinner',
+    desc: 'Upscale seafood spot with oyster bar and extensive raw bar. The seafood towers and grilled fish are outstanding, patio is lovely.',
+    costLabel: '$60-90/person', costVal: 75, url: 'https://www.superiorshrimpandoyster.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Superior+Seafood+New+Orleans',
+    tags: ['seafood', 'oysters', 'upscale'], lat: 29.9422, lng: -90.1167,
+    filters: ['indoor', 'outdoor', 'upscale', 'seafood', 'gluten-free']
+  },
+  din13: {
+    id: 'din13', name: 'August', hood: 'Central Business District', type: 'dinner',
+    desc: 'Fine dining from Chef John Besh showcasing contemporary Creole cuisine. The elegant dining room and impeccable service make it special.',
+    costLabel: '$90-130/person', costVal: 110, url: 'https://www.restaurantaugust.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=August+Restaurant+New+Orleans',
+    tags: ['fine-dining', 'creole', 'upscale'], lat: 29.9497, lng: -90.0739,
+    filters: ['indoor', 'upscale', 'romantic', 'quiet', 'french', 'creole']
+  },
+  din14: {
+    id: 'din14', name: 'Atchafalaya', hood: 'Garden District', type: 'dinner',
+    desc: 'Louisiana cuisine with contemporary touches in a charming historic building. The Sunday jazz brunch is legendary.',
+    costLabel: '$50-75/person', costVal: 63, url: 'https://www.atchafalayarestaurant.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Atchafalaya+New+Orleans',
+    tags: ['creole', 'contemporary'], lat: 29.9272, lng: -90.0867,
+    filters: ['indoor', 'upscale', 'creole', 'gluten-free']
+  },
+  din15: {
+    id: 'din15', name: 'Marjie\'s Grill', hood: 'Broadmoor', type: 'dinner',
+    desc: 'This Southeast Asian-Creole fusion spot is one of those places that food-obsessed locals talk about in hushed, reverent tones. The menu changes frequently but expect bold, creative flavors - think crawfish pad Thai with Louisiana crawfish cooked Thai-style, or Vietnamese-style quail with fish sauce and chilies. The dining room is casual and loud in the best way, with an open kitchen where you can watch the team work. They don\'t take reservations, so expect a wait on weekends, but it\'s absolutely worth it. This is the kind of restaurant that gets written up in Bon Appétit and still manages to feel like a neighborhood joint.',
+    costLabel: '$45-70/person', costVal: 58, url: 'https://www.marjiesgrill.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Marjies+Grill+320+S+Broad+St+New+Orleans',
+    tags: ['asian', 'fusion', 'casual'], lat: 29.9511, lng: -90.1056,
+    filters: ['indoor', 'casual', 'lively', 'asian', 'vegan', 'gluten-free']
+  },
+  din16: {
+    id: 'din16', name: 'Maypop', hood: 'Central Business District', type: 'dinner',
+    desc: 'Chef Michael Gulotta combines Southeast Asian flavors with Louisiana ingredients in ways that shouldn\'t work but absolutely do. The menu is small and changes seasonally, but might include things like Gulf shrimp with lemongrass and coconut, or duck confit spring rolls with Creole mustard. The dining room is intimate and stylish without being stuffy. It\'s the kind of place that impresses on a special occasion but doesn\'t make you feel like you need to whisper. Cocktails are excellent too - the bar program is as thoughtful as the food.',
+    costLabel: '$65-95/person', costVal: 80, url: 'https://www.maypoprestaurant.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Maypop+611+O+Keefe+Ave+New+Orleans',
+    tags: ['asian', 'fusion', 'upscale'], lat: 29.9506, lng: -90.0711,
+    filters: ['indoor', 'upscale', 'romantic', 'asian', 'seafood']
+  },
+
+  // DRINKS
+  drk1: {
+    id: 'drk1', name: 'Carousel Bar', hood: 'French Quarter', type: 'drinks',
+    desc: 'Iconic revolving bar at Hotel Monteleone. The bar literally spins 360 degrees every 15 minutes, and cocktails are excellent.',
+    costLabel: '$30-50/person', costVal: 40, url: 'https://www.hotelmonteleone.com/carousel-bar',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Carousel+Bar+Hotel+Monteleone+New+Orleans',
+    tags: ['cocktails', 'historic'], lat: 29.9564, lng: -90.0658,
+    filters: ['indoor', 'upscale', 'romantic', 'lively']
+  },
+  drk2: {
+    id: 'drk2', name: 'Sazerac Bar', hood: 'French Quarter', type: 'drinks',
+    desc: 'Art Deco masterpiece in Roosevelt Hotel. Order the Sazerac invented here, and admire the stunning murals and woodwork.',
+    costLabel: '$25-45/person', costVal: 35, url: 'https://www.therooseveltneworleans.com/sazerac-bar',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Sazerac+Bar+New+Orleans',
+    tags: ['cocktails', 'art-deco', 'historic'], lat: 29.9508, lng: -90.0706,
+    filters: ['indoor', 'upscale', 'romantic', 'quiet']
+  },
+  drk3: {
+    id: 'drk3', name: 'Bar Tonique', hood: 'Marigny', type: 'drinks',
+    desc: 'Neighborhood bar with serious cocktails and zero pretension. Bartenders who know their craft and jukebox that\'s always perfectly curated.',
+    costLabel: '$20-40/person', costVal: 30, url: 'https://www.bartonique.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Bar+Tonique+New+Orleans',
+    tags: ['cocktails', 'neighborhood', 'casual'], lat: 29.9653, lng: -90.0587,
+    filters: ['indoor', 'casual', 'quiet']
+  },
+  drk4: {
+    id: 'drk4', name: 'French 75 Bar', hood: 'French Quarter', type: 'drinks',
+    desc: 'Elegant champagne bar in Arnaud\'s Restaurant. The French 75 cocktail is their specialty, and atmosphere is sophisticated.',
+    costLabel: '$35-55/person', costVal: 45, url: 'https://www.arnaudsrestaurant.com/french-75-bar',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=French+75+Bar+New+Orleans',
+    tags: ['champagne', 'cocktails', 'upscale'], lat: 29.9572, lng: -90.0669,
+    filters: ['indoor', 'upscale', 'romantic', 'quiet']
+  },
+  drk5: {
+    id: 'drk5', name: 'Cure', hood: 'Freret', type: 'drinks',
+    desc: 'Craft cocktail bar that helped pioneer New Orleans\'s cocktail renaissance. Drink menu changes seasonally and is always inventive.',
+    costLabel: '$30-50/person', costVal: 40, url: 'https://www.curenola.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Cure+New+Orleans',
+    tags: ['cocktails', 'craft', 'creative'], lat: 29.9447, lng: -90.1122,
+    filters: ['indoor', 'upscale', 'quiet']
+  },
+  drk6: {
+    id: 'drk6', name: 'Hot Tin', hood: 'Warehouse District', type: 'drinks',
+    desc: 'Rooftop bar atop Pontchartrain Hotel with stunning city views. Cocktail list is extensive and atmosphere is romantic.',
+    costLabel: '$35-55/person', costVal: 45, url: 'https://www.hottin.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Hot+Tin+New+Orleans',
+    tags: ['rooftop', 'cocktails', 'views'], lat: 29.9467, lng: -90.0689,
+    filters: ['outdoor', 'upscale', 'romantic', 'lively']
+  },
+  drk7: {
+    id: 'drk7', name: 'Bacchanal Wine', hood: 'Bywater', type: 'drinks',
+    desc: 'Wine shop with outdoor courtyard garden featuring live music nightly. Order wine by glass and small plates from back kitchen.',
+    costLabel: '$25-45/person', costVal: 35, url: 'https://www.bacchanalwine.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Bacchanal+Wine+New+Orleans',
+    tags: ['wine', 'live-music', 'outdoor'], lat: 29.9683, lng: -90.0286,
+    filters: ['outdoor', 'casual', 'romantic', 'lively']
+  },
+  drk8: {
+    id: 'drk8', name: 'Jewel of the South', hood: 'Warehouse District', type: 'drinks',
+    desc: 'Classic cocktail bar from Chris Hannah, one of New Orleans\'s most respected bartenders. Menu focuses on pre-Prohibition cocktails.',
+    costLabel: '$30-50/person', costVal: 40, url: 'https://www.jewelofthesouthnola.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Jewel+of+the+South+New+Orleans',
+    tags: ['cocktails', 'classic', 'upscale'], lat: 29.9442, lng: -90.0703,
+    filters: ['indoor', 'upscale', 'quiet']
+  },
+  drk9: {
+    id: 'drk9', name: 'The Delachaise', hood: 'Uptown', type: 'drinks',
+    desc: 'Wine bar with extensive European wine list and excellent small plates. Cozy neighborhood spot with sidewalk seating.',
+    costLabel: '$25-45/person', costVal: 35, url: 'https://www.thedelachaise.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Delachaise+New+Orleans',
+    tags: ['wine', 'small-plates'], lat: 29.9389, lng: -90.1167,
+    filters: ['indoor', 'outdoor', 'casual', 'romantic']
+  },
+  drk10: {
+    id: 'drk10', name: 'Parleaux Beer Lab', hood: 'Bywater', type: 'drinks',
+    desc: 'Craft brewery specializing in experimental beers with an outdoor patio. Dog-friendly and community-focused atmosphere.',
+    costLabel: '$20-35/person', costVal: 28, url: 'https://www.parleauxbeerlab.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Parleaux+Beer+Lab+New+Orleans',
+    tags: ['beer', 'brewery'], lat: 29.9689, lng: -90.0311,
+    filters: ['outdoor', 'casual', 'lively']
+  },
+  drk11: {
+    id: 'drk11', name: 'Vaughan\'s Lounge', hood: 'Bywater', type: 'drinks',
+    desc: 'Every Thursday night, trumpeter Kermit Ruffins plays at this unassuming neighborhood bar, and it\'s one of the most authentic music experiences in New Orleans. This isn\'t a tourist venue - it\'s a corner bar where locals have been gathering for decades. Kermit usually starts around 11 PM, and the place gets packed with people dancing, drinking, and soaking in the music. There\'s no cover charge, drinks are cheap, and the vibe is pure New Orleans. The rest of the week it\'s a quiet neighborhood spot, but Thursday nights are legendary. Cash only.',
+    costLabel: '$15-30/person', costVal: 23, url: 'https://www.facebook.com/vaughanslounge',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Vaughans+Lounge+4229+Dauphine+St+New+Orleans',
+    tags: ['live-music', 'dive-bar', 'local'], lat: 29.9722, lng: -90.0328,
+    filters: ['indoor', 'casual', 'lively']
+  },
+  drk12: {
+    id: 'drk12', name: 'Ms. Mae\'s', hood: 'Irish Channel', type: 'drinks',
+    desc: 'This 24-hour dive bar on Magazine Street is exactly what a New Orleans neighborhood bar should be. It\'s dark, cash-only, and filled with characters. The jukebox is legendary, the pool table is always in use, and the bartenders pour heavy. It\'s the kind of place where service industry workers end their shifts at 3 AM, where regulars have their own stools, and where everyone is welcome as long as they\'re respectful. No food, no fancy cocktails, just cold beer and strong drinks. Locals love it fiercely.',
+    costLabel: '$15-30/person', costVal: 23, url: 'https://www.facebook.com/MsMaes504',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Ms+Maes+4336+Magazine+St+New+Orleans',
+    tags: ['dive-bar', '24-hour', 'local'], lat: 29.9250, lng: -90.1094,
+    filters: ['indoor', 'casual', 'lively']
+  },
+
+  // SNACKS/DESSERT/OTHER
+  snk1: {
+    id: 'snk1', name: 'Angelo Brocato', hood: 'Mid-City', type: 'snacks',
+    desc: 'Italian ice cream and pastry shop since 1905. The gelato, cannoli, and spumoni are all made using family recipes from Sicily.',
+    costLabel: '$10-20/person', costVal: 15, url: 'https://www.angelobrocatoicecream.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Angelo+Brocato+New+Orleans',
+    tags: ['gelato', 'dessert', 'historic'], lat: 29.9678, lng: -90.0872,
+    filters: ['indoor', 'casual']
+  },
+  snk2: {
+    id: 'snk2', name: 'Hansen\'s Sno-Bliz', hood: 'Uptown', type: 'snacks',
+    desc: 'Family-run snowball stand since 1939 using proprietary ice-shaving machine. The cream of nectar flavor is legendary.',
+    costLabel: '$8-15/person', costVal: 12, url: 'https://www.snobliz.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Hansens+Sno-Bliz+New+Orleans',
+    tags: ['snowball', 'dessert'], lat: 29.9422, lng: -90.1056,
+    filters: ['outdoor', 'casual']
+  },
+  snk3: {
+    id: 'snk3', name: 'Café Envie', hood: 'French Quarter', type: 'snacks',
+    desc: 'Late-night café serving beignets, coffee, and light fare. The chocolate-stuffed beignets are decadent variation on the classic.',
+    costLabel: '$12-20/person', costVal: 16, url: 'https://www.cafeenvie.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Cafe+Envie+New+Orleans',
+    tags: ['beignets', 'coffee', 'dessert'], lat: 29.9601, lng: -90.0625,
+    filters: ['indoor', 'casual']
+  },
+  snk4: {
+    id: 'snk4', name: 'Suis Generis', hood: 'Lower Garden District', type: 'snacks',
+    desc: 'Creative dessert and coffee spot with inventive pastries and cakes. The presentation is Instagram-worthy but flavors back it up.',
+    costLabel: '$15-25/person', costVal: 20, url: 'https://www.suisgeneris.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Suis+Generis+New+Orleans',
+    tags: ['dessert', 'pastries', 'creative'], lat: 29.9311, lng: -90.0789,
+    filters: ['indoor', 'upscale', 'quiet', 'vegan', 'gluten-free']
+  },
+  snk5: {
+    id: 'snk5', name: 'Creole Creamery', hood: 'Uptown', type: 'snacks',
+    desc: 'Local ice cream shop with creative flavors like lavender honey and Vietnamese coffee. Portions are generous and prices reasonable.',
+    costLabel: '$10-18/person', costVal: 14, url: 'https://www.creolecreamery.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Creole+Creamery+New+Orleans',
+    tags: ['ice-cream', 'dessert', 'local'], lat: 29.9378, lng: -90.1167,
+    filters: ['indoor', 'casual', 'vegan', 'gluten-free']
+  },
+  snk6: {
+    id: 'snk6', name: 'Laurel Street Bakery', hood: 'Riverbend', type: 'snacks',
+    desc: 'Neighborhood bakery with excellent pastries, cakes, and coffee. The king cakes (in season) are some of the best in the city.',
+    costLabel: '$12-20/person', costVal: 16, url: 'https://www.laurelstreetbakery.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Laurel+Street+Bakery+New+Orleans',
+    tags: ['bakery', 'pastries', 'coffee'], lat: 29.9489, lng: -90.1244,
+    filters: ['indoor', 'casual', 'quiet', 'vegan']
+  },
+  snk7: {
+    id: 'snk7', name: 'La Boulangerie', hood: 'Uptown', type: 'snacks',
+    desc: 'French bakery with authentic pastries and desserts. The croissants and macarons are made fresh daily following traditional techniques.',
+    costLabel: '$12-22/person', costVal: 17, url: 'https://www.laboulangerienola.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=La+Boulangerie+New+Orleans',
+    tags: ['bakery', 'french', 'dessert'], lat: 29.9389, lng: -90.1178,
+    filters: ['indoor', 'upscale', 'quiet']
+  },
+  snk8: {
+    id: 'snk8', name: 'Bearcat Café', hood: 'Uptown', type: 'snacks',
+    desc: 'Neighborhood café known for excellent biscuits and coffee. The honey butter biscuits are a local obsession.',
+    costLabel: '$10-18/person', costVal: 14, url: 'https://www.bearcatcafe.com',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Bearcat+Cafe+New+Orleans',
+    tags: ['cafe', 'biscuits', 'coffee'], lat: 29.9411, lng: -90.1189,
+    filters: ['indoor', 'casual', 'vegan', 'gluten-free']
+  },
+  // 145 RESTAURANTS FROM EXCEL
+  rest1: {
+    id: 'rest1', name: 'Suis Generis', hood: 'Bywater', type: 'dinner',
+    desc: 'Ever-changing experimental menu with a cult following',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Suis+Generis+New+Orleans',
+    menuUrl: 'https://www.suisgeneris.com/menu-1.html', mapUrl: 'https://maps.google.com/?q=Suis+Generis+New+Orleans',
+    tags: ['indoor', 'american'], lat: 29.9645, lng: -90.032,
+    filters: ['indoor', 'casual']
+  },
+  rest2: {
+    id: 'rest2', name: 'Jamila\'s Cafe', hood: 'Uptown', type: 'dinner',
+    desc: 'Intimate Tunisian spot blending Mediterranean and Creole flavors',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Jamilas+Cafe+New+Orleans',
+    menuUrl: 'http://www.jamilascafe.com/menu.html', mapUrl: 'https://maps.google.com/?q=Jamilas+Cafe+New+Orleans',
+    tags: ['mediterranean', 'romantic'], lat: 29.9311, lng: -90.11,
+    filters: ['romantic']
+  },
+  rest3: {
+    id: 'rest3', name: 'Nikkei Izakaya', hood: 'Uptown', type: 'dinner',
+    desc: 'Japanese-Peruvian fusion hidden in music venue',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Nikkei+Izakaya+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Nikkei+Izakaya+New+Orleans',
+    tags: ['asian', 'indoor'], lat: 29.9311, lng: -90.11,
+    filters: ['casual', 'indoor']
+  },
+  rest4: {
+    id: 'rest4', name: 'Palm & Pine', hood: 'French Quarter', type: 'dinner',
+    desc: 'Southern-Caribbean fusion with bold flavors',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Palm+and+Pine+New+Orleans',
+    menuUrl: 'https://www.palmandpinenola.com/menu', mapUrl: 'https://maps.google.com/?q=Palm+and+Pine+New+Orleans',
+    tags: ['upscale', 'indoor'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'indoor']
+  },
+  rest5: {
+    id: 'rest5', name: 'Maypop', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Southeast Asian-Louisiana fusion',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Maypop+New+Orleans',
+    menuUrl: 'https://www.maypoprestaurant.com/menu', mapUrl: 'https://maps.google.com/?q=Maypop+New+Orleans',
+    tags: ['asian', 'upscale'], lat: 29.9465, lng: -90.073,
+    filters: ['casual', 'upscale']
+  },
+  rest6: {
+    id: 'rest6', name: 'Compère Lapin', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Caribbean-inspired American fare in stylish space',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Compere+Lapin+New+Orleans',
+    menuUrl: 'https://www.comperelapin.com/menus', mapUrl: 'https://maps.google.com/?q=Compere+Lapin+New+Orleans',
+    tags: ['upscale', 'indoor'], lat: 29.9465, lng: -90.073,
+    filters: ['upscale', 'indoor']
+  },
+  rest7: {
+    id: 'rest7', name: 'Peche Seafood Grill', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Award-winning seafood from James Beard winner',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Peche+Seafood+Grill+New+Orleans',
+    menuUrl: 'https://pecherestaurant.com/menu', mapUrl: 'https://maps.google.com/?q=Peche+Seafood+Grill+New+Orleans',
+    tags: ['seafood', 'upscale'], lat: 29.9465, lng: -90.073,
+    filters: ['upscale']
+  },
+  rest8: {
+    id: 'rest8', name: 'Cochon', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Cajun specialties in rustic-chic setting',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Cochon+New+Orleans',
+    menuUrl: 'https://www.cochonrestaurant.com/menu', mapUrl: 'https://maps.google.com/?q=Cochon+New+Orleans',
+    tags: ['cajun', 'casual'], lat: 29.9465, lng: -90.073,
+    filters: ['casual']
+  },
+  rest9: {
+    id: 'rest9', name: 'Herbsaint', hood: 'Warehouse District', type: 'dinner',
+    desc: 'French-Southern cuisine from renowned chef',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Herbsaint+New+Orleans',
+    menuUrl: 'https://www.herbsaint.com/menu', mapUrl: 'https://maps.google.com/?q=Herbsaint+New+Orleans',
+    tags: ['french', 'upscale'], lat: 29.9465, lng: -90.073,
+    filters: ['upscale']
+  },
+  rest10: {
+    id: 'rest10', name: 'Commander\'s Palace', hood: 'Garden District', type: 'dinner',
+    desc: 'Iconic fine dining in Victorian mansion',
+    costLabel: '$$$$', costVal: 100, url: 'https://maps.google.com/?q=Commanders+Palace+New+Orleans',
+    menuUrl: 'https://www.commanderspalace.com/menus', mapUrl: 'https://maps.google.com/?q=Commanders+Palace+New+Orleans',
+    tags: ['upscale', 'creole'], lat: 29.9265, lng: -90.085,
+    filters: ['upscale']
+  },
+  rest11: {
+    id: 'rest11', name: 'Coquette', hood: 'Garden District', type: 'dinner',
+    desc: 'French-inspired seasonal American',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Coquette+New+Orleans',
+    menuUrl: 'https://www.coquettenola.com/menus', mapUrl: 'https://maps.google.com/?q=Coquette+New+Orleans',
+    tags: ['french', 'romantic'], lat: 29.9265, lng: -90.085,
+    filters: ['upscale', 'romantic']
+  },
+  rest12: {
+    id: 'rest12', name: 'Shaya', hood: 'Uptown', type: 'dinner',
+    desc: 'Modern Israeli kitchen with wood-fired pita',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Shaya+New+Orleans',
+    menuUrl: 'https://www.shayarestaurant.com/menu', mapUrl: 'https://maps.google.com/?q=Shaya+New+Orleans',
+    tags: ['mediterranean', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['romantic', 'casual']
+  },
+  rest13: {
+    id: 'rest13', name: 'Apolline', hood: 'Garden District', type: 'dinner',
+    desc: 'French bistro fare in charming cottage',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Apolline+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Apolline+New+Orleans',
+    tags: ['french', 'romantic'], lat: 29.9265, lng: -90.085,
+    filters: ['upscale', 'romantic']
+  },
+  rest14: {
+    id: 'rest14', name: 'Mosquito Supper Club', hood: 'Mid-City', type: 'dinner',
+    desc: 'Cajun tasting menu celebrating Louisiana bayou',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Mosquito+Supper+Club+New+Orleans',
+    menuUrl: 'https://www.mosquitosupperclub.com/', mapUrl: 'https://maps.google.com/?q=Mosquito+Supper+Club+New+Orleans',
+    tags: ['cajun', 'upscale'], lat: 29.968, lng: -90.095,
+    filters: ['upscale']
+  },
+  rest15: {
+    id: 'rest15', name: 'Turkey and the Wolf', hood: 'Irish Channel', type: 'dinner',
+    desc: 'Creative sandwiches with cult following',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Turkey+and+the+Wolf+New+Orleans',
+    menuUrl: 'https://www.turkeyandthewolf.com/menu', mapUrl: 'https://maps.google.com/?q=Turkey+and+the+Wolf+New+Orleans',
+    tags: ['casual', 'american'], lat: 29.925, lng: -90.09,
+    filters: ['casual']
+  },
+  rest16: {
+    id: 'rest16', name: 'Warehouse District Oyster Bar', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Fresh Gulf oysters and seafood',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Warehouse+District+Oyster+Bar+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Warehouse+District+Oyster+Bar+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9465, lng: -90.073,
+    filters: ['upscale', 'casual']
+  },
+  rest17: {
+    id: 'rest17', name: 'Mariza', hood: 'Marigny', type: 'dinner',
+    desc: 'Mediterranean small plates with wine focus',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Mariza+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mariza+New+Orleans',
+    tags: ['mediterranean', 'romantic'], lat: 29.9655, lng: -90.055,
+    filters: ['romantic']
+  },
+  rest18: {
+    id: 'rest18', name: 'Restaurant August', hood: 'CBD', type: 'dinner',
+    desc: 'Elevated Louisiana ingredients meet French technique',
+    costLabel: '$$$$', costVal: 100, url: 'https://maps.google.com/?q=Restaurant+August+New+Orleans',
+    menuUrl: 'https://www.restaurantaugust.com/menus', mapUrl: 'https://maps.google.com/?q=Restaurant+August+New+Orleans',
+    tags: ['french', 'upscale'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale']
+  },
+  rest19: {
+    id: 'rest19', name: 'Josephine Estelle', hood: 'CBD', type: 'dinner',
+    desc: 'Italian-Creole cuisine in Ace Hotel',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Josephine+Estelle+New+Orleans',
+    menuUrl: 'https://www.josephineestelle.com/menus', mapUrl: 'https://maps.google.com/?q=Josephine+Estelle+New+Orleans',
+    tags: ['italian', 'casual'], lat: 29.9511, lng: -90.0715,
+    filters: ['romantic', 'casual']
+  },
+  rest20: {
+    id: 'rest20', name: 'Emeril\'s', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Creole-New American from celebrity chef',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Emerils+New+Orleans',
+    menuUrl: 'https://www.emerilsrestaurants.com/emerils-new-orleans/menus', mapUrl: 'https://maps.google.com/?q=Emerils+New+Orleans',
+    tags: ['creole', 'upscale'], lat: 29.9465, lng: -90.073,
+    filters: ['upscale']
+  },
+  rest21: {
+    id: 'rest21', name: 'Brennan\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'Historic Creole restaurant with courtyard',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Brennans+New+Orleans',
+    menuUrl: 'https://www.brennansneworleans.com/menus', mapUrl: 'https://maps.google.com/?q=Brennans+New+Orleans',
+    tags: ['creole', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['romantic']
+  },
+  rest22: {
+    id: 'rest22', name: 'GW Fins', hood: 'French Quarter', type: 'dinner',
+    desc: 'Upscale seafood with fresh daily catches',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=GW+Fins+New+Orleans',
+    menuUrl: 'https://www.gwfins.com/menus', mapUrl: 'https://maps.google.com/?q=GW+Fins+New+Orleans',
+    tags: ['seafood', 'upscale'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale']
+  },
+  rest23: {
+    id: 'rest23', name: 'SoBou', hood: 'French Quarter', type: 'dinner',
+    desc: 'Creative Creole small plates from Commander\'s family',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=SoBou+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=SoBou+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest24: {
+    id: 'rest24', name: 'Sylvain', hood: 'French Quarter', type: 'dinner',
+    desc: 'Rustic-chic gastropub in historic building',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Sylvain+New+Orleans',
+    menuUrl: 'https://www.sylvainnola.com/menus', mapUrl: 'https://maps.google.com/?q=Sylvain+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest25: {
+    id: 'rest25', name: 'Tableau', hood: 'French Quarter', type: 'dinner',
+    desc: 'Refined Creole in historic Jackson Square',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Tableau+New+Orleans',
+    menuUrl: 'https://www.tableaufrenchquarter.com/menus', mapUrl: 'https://maps.google.com/?q=Tableau+New+Orleans',
+    tags: ['creole', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['romantic']
+  },
+  rest26: {
+    id: 'rest26', name: 'Arnaud\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'Classic Creole since 1918',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Arnauds+New+Orleans',
+    menuUrl: 'https://www.arnaudsrestaurant.com/menus', mapUrl: 'https://maps.google.com/?q=Arnauds+New+Orleans',
+    tags: ['creole', 'upscale'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale']
+  },
+  rest27: {
+    id: 'rest27', name: 'Galatoire\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'Old-line Creole with jacket-required Friday lunch',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Galatoires+New+Orleans',
+    menuUrl: 'https://www.galatoires.com/menus', mapUrl: 'https://maps.google.com/?q=Galatoires+New+Orleans',
+    tags: ['creole', 'upscale'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale']
+  },
+  rest28: {
+    id: 'rest28', name: 'Tujague\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'New Orleans\' second-oldest restaurant',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Tujagues+New+Orleans',
+    menuUrl: 'https://www.tujaguesrestaurant.com/menu', mapUrl: 'https://maps.google.com/?q=Tujagues+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest29: {
+    id: 'rest29', name: 'Antoine\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'America\'s oldest family-run restaurant (1840)',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Antoines+New+Orleans',
+    menuUrl: 'https://www.antoines.com/menus', mapUrl: 'https://maps.google.com/?q=Antoines+New+Orleans',
+    tags: ['creole', 'upscale'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale']
+  },
+  rest30: {
+    id: 'rest30', name: 'Muriel\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'Historic mansion with ghost-filled dining rooms',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Muriels+Jackson+Square+New+Orleans',
+    menuUrl: 'https://www.muriels.com/menus', mapUrl: 'https://maps.google.com/?q=Muriels+Jackson+Square+New+Orleans',
+    tags: ['creole', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['romantic']
+  },
+  rest31: {
+    id: 'rest31', name: 'Court of Two Sisters', hood: 'French Quarter', type: 'dinner',
+    desc: 'Jazz brunch in romantic courtyard',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Court+of+Two+Sisters+New+Orleans',
+    menuUrl: 'https://www.courtoftwosisters.com/menus', mapUrl: 'https://maps.google.com/?q=Court+of+Two+Sisters+New+Orleans',
+    tags: ['creole', 'outdoor'], lat: 29.9585, lng: -90.0643,
+    filters: ['romantic', 'outdoor']
+  },
+  rest32: {
+    id: 'rest32', name: 'Mr. B\'s Bistro', hood: 'French Quarter', type: 'dinner',
+    desc: 'Contemporary Creole from Brennan family',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Mr+Bs+Bistro+New+Orleans',
+    menuUrl: 'https://www.mrbsbistro.com/menus', mapUrl: 'https://maps.google.com/?q=Mr+Bs+Bistro+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest33: {
+    id: 'rest33', name: 'The Grill Room', hood: 'CBD', type: 'dinner',
+    desc: 'Fine dining in Windsor Court Hotel',
+    costLabel: '$$$$', costVal: 100, url: 'https://maps.google.com/?q=The+Grill+Room+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Grill+Room+New+Orleans',
+    tags: ['upscale', 'american'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale', 'casual']
+  },
+  rest34: {
+    id: 'rest34', name: 'Lilette', hood: 'Uptown', type: 'dinner',
+    desc: 'French bistro with Magazine Street charm',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Lilette+New+Orleans',
+    menuUrl: 'https://www.liletterestaurant.com/menus', mapUrl: 'https://maps.google.com/?q=Lilette+New+Orleans',
+    tags: ['french', 'romantic'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale', 'romantic']
+  },
+  rest35: {
+    id: 'rest35', name: 'Patois', hood: 'Uptown', type: 'dinner',
+    desc: 'French-Asian bistro in charming cottage',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Patois+New+Orleans',
+    menuUrl: 'https://www.patoisnola.com/menus', mapUrl: 'https://maps.google.com/?q=Patois+New+Orleans',
+    tags: ['french', 'asian'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale', 'casual']
+  },
+  rest36: {
+    id: 'rest36', name: 'Jacques-Imo\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Colorful Creole soul food institution',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Jacques+Imos+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Jacques+Imos+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest37: {
+    id: 'rest37', name: 'Brigtsen\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Creole-Cajun in intimate Victorian cottage',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Brigtsens+New+Orleans',
+    menuUrl: 'https://www.brigtsens.com/menus', mapUrl: 'https://maps.google.com/?q=Brigtsens+New+Orleans',
+    tags: ['creole', 'cajun'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest38: {
+    id: 'rest38', name: 'Gautreau\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Hidden gem for contemporary American',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Gautreaus+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Gautreaus+New+Orleans',
+    tags: ['american', 'romantic'], lat: 29.9311, lng: -90.11,
+    filters: ['casual', 'romantic']
+  },
+  rest39: {
+    id: 'rest39', name: 'Clancy\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Old-line Creole neighborhood institution',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Clancys+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Clancys+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest40: {
+    id: 'rest40', name: 'Dante\'s Kitchen', hood: 'Uptown', type: 'dinner',
+    desc: 'Farm-to-table Creole with Sunday brunch',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Dantes+Kitchen+New+Orleans',
+    menuUrl: 'https://www.danteskitchen.com/menus', mapUrl: 'https://maps.google.com/?q=Dantes+Kitchen+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest41: {
+    id: 'rest41', name: 'Upperline', hood: 'Uptown', type: 'dinner',
+    desc: 'Art-filled Creole townhouse',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Upperline+New+Orleans',
+    menuUrl: 'https://www.upperline.com/menus', mapUrl: 'https://maps.google.com/?q=Upperline+New+Orleans',
+    tags: ['creole', 'romantic'], lat: 29.9311, lng: -90.11,
+    filters: ['romantic']
+  },
+  rest42: {
+    id: 'rest42', name: 'Domenica', hood: 'CBD', type: 'dinner',
+    desc: 'Wood-fired Italian in Roosevelt Hotel',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Domenica+New+Orleans',
+    menuUrl: 'https://www.domenicarestaurant.com/menus', mapUrl: 'https://maps.google.com/?q=Domenica+New+Orleans',
+    tags: ['italian', 'casual'], lat: 29.9511, lng: -90.0715,
+    filters: ['romantic', 'casual']
+  },
+  rest43: {
+    id: 'rest43', name: 'Borgne', hood: 'CBD', type: 'dinner',
+    desc: 'Seafood-focused Cajun-Creole',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Borgne+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Borgne+New+Orleans',
+    tags: ['creole', 'seafood'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale']
+  },
+  rest44: {
+    id: 'rest44', name: 'Luke', hood: 'CBD', type: 'dinner',
+    desc: 'French-German brasserie from John Besh',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Luke+New+Orleans',
+    menuUrl: 'https://www.lukeneworleans.com/menus', mapUrl: 'https://maps.google.com/?q=Luke+New+Orleans',
+    tags: ['french', 'casual'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale', 'casual']
+  },
+  rest45: {
+    id: 'rest45', name: 'Lüke San Antonio', hood: 'CBD', type: 'dinner',
+    desc: 'Upscale German-French fare',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Luke+San+Antonio+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Luke+San+Antonio+New+Orleans',
+    tags: ['french', 'upscale'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale']
+  },
+  rest46: {
+    id: 'rest46', name: 'Willa Jean', hood: 'CBD', type: 'dinner',
+    desc: 'Southern bakery-cafe all day',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Willa+Jean+New+Orleans',
+    menuUrl: 'https://www.willajean.com/menus', mapUrl: 'https://maps.google.com/?q=Willa+Jean+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9511, lng: -90.0715,
+    filters: ['casual']
+  },
+  rest47: {
+    id: 'rest47', name: 'Balise', hood: 'CBD', type: 'dinner',
+    desc: 'Contemporary Louisiana in Four Seasons',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Balise+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Balise+New+Orleans',
+    tags: ['creole', 'upscale'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale']
+  },
+  rest48: {
+    id: 'rest48', name: 'Root', hood: 'CBD', type: 'dinner',
+    desc: 'Molecular gastronomy meets Louisiana ingredients',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Root+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Root+New+Orleans',
+    tags: ['upscale', 'american'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale', 'casual']
+  },
+  rest49: {
+    id: 'rest49', name: 'Besh Steak', hood: 'CBD', type: 'dinner',
+    desc: 'Steakhouse in Harrah\'s Casino',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Besh+Steak+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Besh+Steak+New+Orleans',
+    tags: ['american', 'upscale'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale', 'casual']
+  },
+  rest50: {
+    id: 'rest50', name: 'Drago\'s', hood: 'CBD', type: 'dinner',
+    desc: 'Famous charbroiled oysters',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Dragos+New+Orleans',
+    menuUrl: 'https://www.dragosrestaurant.com/menus', mapUrl: 'https://maps.google.com/?q=Dragos+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale', 'casual']
+  },
+  rest51: {
+    id: 'rest51', name: 'Meauxbar', hood: 'French Quarter', type: 'dinner',
+    desc: 'Intimate French bistro with craft cocktails',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Meauxbar+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Meauxbar+New+Orleans',
+    tags: ['french', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'romantic']
+  },
+  rest52: {
+    id: 'rest52', name: 'Bayona', hood: 'French Quarter', type: 'dinner',
+    desc: 'Global-inspired cuisine in historic cottage',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Bayona+New+Orleans',
+    menuUrl: 'https://www.bayona.com/menus', mapUrl: 'https://maps.google.com/?q=Bayona+New+Orleans',
+    tags: ['upscale', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'romantic']
+  },
+  rest53: {
+    id: 'rest53', name: 'Justine', hood: 'French Quarter', type: 'dinner',
+    desc: 'Late-night French bistro',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Justine+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Justine+New+Orleans',
+    tags: ['french', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'romantic']
+  },
+  rest54: {
+    id: 'rest54', name: 'Kingfish', hood: 'French Quarter', type: 'dinner',
+    desc: 'Modern Creole in stylish space',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Kingfish+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Kingfish+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest55: {
+    id: 'rest55', name: 'Mopho', hood: 'Mid-City', type: 'dinner',
+    desc: 'Vietnamese-Cajun fusion',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Mopho+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mopho+New+Orleans',
+    tags: ['asian', 'cajun'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest56: {
+    id: 'rest56', name: '1000 Figs', hood: 'Marigny', type: 'dinner',
+    desc: 'Mediterranean mezze and natural wine',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=1000+Figs+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=1000+Figs+New+Orleans',
+    tags: ['mediterranean', 'romantic'], lat: 29.9655, lng: -90.055,
+    filters: ['romantic']
+  },
+  rest57: {
+    id: 'rest57', name: 'Bacchanal', hood: 'Bywater', type: 'dinner',
+    desc: 'Wine bar with garden and live music',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Bacchanal+Wine+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Bacchanal+Wine+New+Orleans',
+    tags: ['outdoor', 'casual'], lat: 29.9645, lng: -90.032,
+    filters: ['outdoor', 'casual']
+  },
+  rest58: {
+    id: 'rest58', name: 'Pizza Domenica', hood: 'Uptown', type: 'dinner',
+    desc: 'Wood-fired Neapolitan pizza',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Pizza+Domenica+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Pizza+Domenica+New+Orleans',
+    tags: ['italian', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['romantic', 'casual']
+  },
+  rest59: {
+    id: 'rest59', name: 'La Petite Grocery', hood: 'Garden District', type: 'dinner',
+    desc: 'Refined bistro in former corner store',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=La+Petite+Grocery+New+Orleans',
+    menuUrl: 'https://www.lapetitegrocery.com/menus', mapUrl: 'https://maps.google.com/?q=La+Petite+Grocery+New+Orleans',
+    tags: ['american', 'romantic'], lat: 29.9265, lng: -90.085,
+    filters: ['casual', 'romantic']
+  },
+  rest60: {
+    id: 'rest60', name: 'High Hat Cafe', hood: 'Uptown', type: 'dinner',
+    desc: 'Fried chicken and comfort food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=High+Hat+Cafe+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=High+Hat+Cafe+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest61: {
+    id: 'rest61', name: 'Toups\' Meatery', hood: 'Mid-City', type: 'dinner',
+    desc: 'Nose-to-tail Cajun butcher shop',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Toups+Meatery+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Toups+Meatery+New+Orleans',
+    tags: ['cajun', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest62: {
+    id: 'rest62', name: 'Liuzza\'s by the Track', hood: 'Mid-City', type: 'dinner',
+    desc: 'Neighborhood po-boy institution',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Liuzzas+by+the+Track+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Liuzzas+by+the+Track+New+Orleans',
+    tags: ['casual', 'creole'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest63: {
+    id: 'rest63', name: 'Mandina\'s', hood: 'Mid-City', type: 'dinner',
+    desc: 'Family-run Creole since 1932',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Mandinas+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mandinas+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest64: {
+    id: 'rest64', name: 'Ye Olde College Inn', hood: 'Mid-City', type: 'dinner',
+    desc: 'Renovated diner with oyster bar',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Ye+Olde+College+Inn+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Ye+Olde+College+Inn+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest65: {
+    id: 'rest65', name: 'Parkway Bakery', hood: 'Mid-City', type: 'dinner',
+    desc: 'Legendary roast beef po-boys',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Parkway+Bakery+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Parkway+Bakery+New+Orleans',
+    tags: ['casual', 'american'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest66: {
+    id: 'rest66', name: 'Dooky Chase', hood: 'Treme', type: 'dinner',
+    desc: 'Historic Creole soul food icon',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Dooky+Chase+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Dooky+Chase+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.964, lng: -90.07,
+    filters: ['casual']
+  },
+  rest67: {
+    id: 'rest67', name: 'Willie Mae\'s Scotch House', hood: 'Treme', type: 'dinner',
+    desc: 'Fried chicken hall of fame',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Willie+Maes+Scotch+House+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Willie+Maes+Scotch+House+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.964, lng: -90.07,
+    filters: ['casual']
+  },
+  rest68: {
+    id: 'rest68', name: 'Li\'l Dizzy\'s', hood: 'Treme', type: 'dinner',
+    desc: 'Creole buffet and soul food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Lil+Dizzys+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Lil+Dizzys+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.964, lng: -90.07,
+    filters: ['casual']
+  },
+  rest69: {
+    id: 'rest69', name: 'The Joint', hood: 'Bywater', type: 'dinner',
+    desc: 'BBQ smokehouse in gas station',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=The+Joint+BBQ+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Joint+BBQ+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9645, lng: -90.032,
+    filters: ['casual']
+  },
+  rest70: {
+    id: 'rest70', name: 'Elizabeth\'s', hood: 'Bywater', type: 'dinner',
+    desc: 'Praline bacon brunch spot',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Elizabeths+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Elizabeths+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9645, lng: -90.032,
+    filters: ['casual']
+  },
+  rest71: {
+    id: 'rest71', name: 'Kebab', hood: 'Uptown', type: 'dinner',
+    desc: 'Middle Eastern street food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Kebab+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Kebab+New+Orleans',
+    tags: ['mediterranean', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['romantic', 'casual']
+  },
+  rest72: {
+    id: 'rest72', name: 'Magasin Kitchen', hood: 'Lower Garden District', type: 'dinner',
+    desc: 'Vietnamese-Cajun in converted corner store',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Magasin+Kitchen+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Magasin+Kitchen+New+Orleans',
+    tags: ['asian', 'cajun'], lat: 29.929, lng: -90.082,
+    filters: ['casual']
+  },
+  rest73: {
+    id: 'rest73', name: 'Cafe Reconcile', hood: 'Lower Garden District', type: 'dinner',
+    desc: 'Soul food supporting at-risk youth',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Cafe+Reconcile+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Cafe+Reconcile+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.929, lng: -90.082,
+    filters: ['casual']
+  },
+  rest74: {
+    id: 'rest74', name: 'Tan Dinh', hood: 'Lower Garden District', type: 'dinner',
+    desc: 'Vietnamese in converted gas station',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Tan+Dinh+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Tan+Dinh+New+Orleans',
+    tags: ['asian', 'casual'], lat: 29.929, lng: -90.082,
+    filters: ['casual']
+  },
+  rest75: {
+    id: 'rest75', name: 'Piece of Meat', hood: 'Uptown', type: 'dinner',
+    desc: 'Butcher shop with sandwich counter',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Piece+of+Meat+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Piece+of+Meat+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest76: {
+    id: 'rest76', name: 'Atchafalaya', hood: 'Lower Garden District', type: 'dinner',
+    desc: 'Contemporary Louisiana comfort food',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Atchafalaya+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Atchafalaya+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.929, lng: -90.082,
+    filters: ['casual']
+  },
+  rest77: {
+    id: 'rest77', name: 'Carmo', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Tropical vegan and vegetarian',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Carmo+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Carmo+New+Orleans',
+    tags: ['casual', 'outdoor'], lat: 29.9465, lng: -90.073,
+    filters: ['casual', 'outdoor']
+  },
+  rest78: {
+    id: 'rest78', name: 'Seed', hood: 'Uptown', type: 'dinner',
+    desc: 'Plant-based New Orleans cuisine',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Seed+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Seed+New+Orleans',
+    tags: ['casual', 'american'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest79: {
+    id: 'rest79', name: 'Saffron NOLA', hood: 'Uptown', type: 'dinner',
+    desc: 'Indian with Louisiana influences',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Saffron+NOLA+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Saffron+NOLA+New+Orleans',
+    tags: ['asian', 'upscale'], lat: 29.9311, lng: -90.11,
+    filters: ['casual', 'upscale']
+  },
+  rest80: {
+    id: 'rest80', name: 'The Elysian Bar', hood: 'Marigny', type: 'dinner',
+    desc: 'Hotel bar with excellent small plates',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=The+Elysian+Bar+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Elysian+Bar+New+Orleans',
+    tags: ['american', 'romantic'], lat: 29.9655, lng: -90.055,
+    filters: ['casual', 'romantic']
+  },
+  rest81: {
+    id: 'rest81', name: 'N7', hood: 'French Quarter', type: 'dinner',
+    desc: 'French-Japanese fusion',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=N7+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=N7+New+Orleans',
+    tags: ['french', 'asian'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'casual']
+  },
+  rest82: {
+    id: 'rest82', name: 'Paladar 511', hood: 'Marigny', type: 'dinner',
+    desc: 'Latin fusion with craft cocktails',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Paladar+511+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Paladar+511+New+Orleans',
+    tags: ['casual', 'romantic'], lat: 29.9655, lng: -90.055,
+    filters: ['casual', 'romantic']
+  },
+  rest83: {
+    id: 'rest83', name: 'Horn\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'German beer hall and brats',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Horns+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Horns+New+Orleans',
+    tags: ['casual', 'american'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest84: {
+    id: 'rest84', name: 'Kin', hood: 'Uptown', type: 'dinner',
+    desc: 'Thai street food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Kin+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Kin+New+Orleans',
+    tags: ['asian', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest85: {
+    id: 'rest85', name: 'Bevi Seafood Co.', hood: 'Uptown', type: 'dinner',
+    desc: 'Oyster bar and seafood market',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Bevi+Seafood+Co+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Bevi+Seafood+Co+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale', 'casual']
+  },
+  rest86: {
+    id: 'rest86', name: 'Bourrée at Bacchanal', hood: 'Bywater', type: 'dinner',
+    desc: 'Louisiana comfort food in wine garden',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Bourree+at+Bacchanal+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Bourree+at+Bacchanal+New+Orleans',
+    tags: ['cajun', 'outdoor'], lat: 29.9645, lng: -90.032,
+    filters: ['outdoor']
+  },
+  rest87: {
+    id: 'rest87', name: 'Luvi', hood: 'Uptown', type: 'dinner',
+    desc: 'Wine bar with creative small plates',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Luvi+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Luvi+New+Orleans',
+    tags: ['american', 'romantic'], lat: 29.9311, lng: -90.11,
+    filters: ['casual', 'romantic']
+  },
+  rest88: {
+    id: 'rest88', name: 'Clesi', hood: 'Garden District', type: 'dinner',
+    desc: 'Modern Italian in garden setting',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Clesi+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Clesi+New+Orleans',
+    tags: ['italian', 'romantic'], lat: 29.9265, lng: -90.085,
+    filters: ['romantic']
+  },
+  rest89: {
+    id: 'rest89', name: 'Vessel NOLA', hood: 'Mid-City', type: 'dinner',
+    desc: 'Ramen and sake bar',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Vessel+NOLA+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Vessel+NOLA+New+Orleans',
+    tags: ['asian', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest90: {
+    id: 'rest90', name: 'Yuki Izakaya', hood: 'Mid-City', type: 'dinner',
+    desc: 'Japanese small plates and sake',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Yuki+Izakaya+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Yuki+Izakaya+New+Orleans',
+    tags: ['asian', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest91: {
+    id: 'rest91', name: 'Lola\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Spanish tapas and paella',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Lolas+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Lolas+New+Orleans',
+    tags: ['mediterranean', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['romantic', 'casual']
+  },
+  rest92: {
+    id: 'rest92', name: 'Oxalis', hood: 'Marigny', type: 'dinner',
+    desc: 'Vegan fine dining',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Oxalis+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Oxalis+New+Orleans',
+    tags: ['upscale', 'romantic'], lat: 29.9655, lng: -90.055,
+    filters: ['upscale', 'romantic']
+  },
+  rest93: {
+    id: 'rest93', name: 'Marjie\'s Grill', hood: 'Uptown', type: 'dinner',
+    desc: 'Southeast Asian-Louisiana mashup',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Marjies+Grill+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Marjies+Grill+New+Orleans',
+    tags: ['asian', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest94: {
+    id: 'rest94', name: 'Cane & Table', hood: 'French Quarter', type: 'dinner',
+    desc: 'Caribbean-inspired cocktails and food',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Cane+and+Table+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Cane+and+Table+New+Orleans',
+    tags: ['casual', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual', 'romantic']
+  },
+  rest95: {
+    id: 'rest95', name: 'Satsuma Cafe', hood: 'Bywater', type: 'dinner',
+    desc: 'Healthy breakfast and lunch',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Satsuma+Cafe+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Satsuma+Cafe+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9645, lng: -90.032,
+    filters: ['casual']
+  },
+  rest96: {
+    id: 'rest96', name: 'Boil Seafood House', hood: 'Uptown', type: 'dinner',
+    desc: 'Cajun seafood boils',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Boil+Seafood+House+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Boil+Seafood+House+New+Orleans',
+    tags: ['cajun', 'seafood'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale']
+  },
+  rest97: {
+    id: 'rest97', name: 'Red\'s Chinese', hood: 'Uptown', type: 'dinner',
+    desc: 'Sichuan in shotgun house',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Reds+Chinese+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Reds+Chinese+New+Orleans',
+    tags: ['asian', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest98: {
+    id: 'rest98', name: 'DTB', hood: 'Uptown', type: 'dinner',
+    desc: 'Refined Vietnamese',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=DTB+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=DTB+New+Orleans',
+    tags: ['asian', 'upscale'], lat: 29.9311, lng: -90.11,
+    filters: ['casual', 'upscale']
+  },
+  rest99: {
+    id: 'rest99', name: 'Mais Arepas', hood: 'Carrollton', type: 'dinner',
+    desc: 'Venezuelan street food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Mais+Arepas+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mais+Arepas+New+Orleans',
+    tags: ['casual', 'outdoor'], lat: 29.952, lng: -90.12,
+    filters: ['casual', 'outdoor']
+  },
+  rest100: {
+    id: 'rest100', name: 'Carrollton Market', hood: 'Carrollton', type: 'dinner',
+    desc: 'Neighborhood bar with great burgers',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Carrollton+Market+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Carrollton+Market+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.952, lng: -90.12,
+    filters: ['casual']
+  },
+  rest101: {
+    id: 'rest101', name: 'Camellia Grill', hood: 'Riverbend', type: 'dinner',
+    desc: 'Classic diner with counter seating',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Camellia+Grill+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Camellia+Grill+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.935, lng: -90.123,
+    filters: ['casual']
+  },
+  rest102: {
+    id: 'rest102', name: 'Brocato\'s', hood: 'Mid-City', type: 'dinner',
+    desc: 'Sicilian ice cream since 1905',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Brocatos+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Brocatos+New+Orleans',
+    tags: ['italian', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['romantic', 'casual']
+  },
+  rest103: {
+    id: 'rest103', name: 'Hansen\'s Sno-Bliz', hood: 'Uptown', type: 'dinner',
+    desc: 'Third-generation snowball stand',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Hansens+Sno+Bliz+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Hansens+Sno+Bliz+New+Orleans',
+    tags: ['casual', 'outdoor'], lat: 29.9311, lng: -90.11,
+    filters: ['casual', 'outdoor']
+  },
+  rest104: {
+    id: 'rest104', name: 'Mid-City Pizza', hood: 'Mid-City', type: 'dinner',
+    desc: 'Thin-crust New York-style pies',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Mid+City+Pizza+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mid+City+Pizza+New+Orleans',
+    tags: ['italian', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['romantic', 'casual']
+  },
+  rest105: {
+    id: 'rest105', name: 'Venezia', hood: 'Mid-City', type: 'dinner',
+    desc: 'Family Italian with big portions',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Venezia+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Venezia+New+Orleans',
+    tags: ['italian', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['romantic', 'casual']
+  },
+  rest106: {
+    id: 'rest106', name: 'Avery\'s on Tulane', hood: 'Mid-City', type: 'dinner',
+    desc: 'Neighborhood bar with upscale pub food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Averys+on+Tulane+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Averys+on+Tulane+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest107: {
+    id: 'rest107', name: 'Pal\'s Lounge', hood: 'Mid-City', type: 'dinner',
+    desc: 'Dive bar with surprisingly good food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Pals+Lounge+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Pals+Lounge+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest108: {
+    id: 'rest108', name: 'R&O\'s', hood: 'Broadmoor', type: 'dinner',
+    desc: 'Po-boys and seafood since 1985',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=R+and+Os+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=R+and+Os+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.948, lng: -90.105,
+    filters: ['upscale', 'casual']
+  },
+  rest109: {
+    id: 'rest109', name: 'Katie\'s', hood: 'Mid-City', type: 'dinner',
+    desc: 'Neighborhood spot for po-boys and seafood',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Katies+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Katies+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['upscale', 'casual']
+  },
+  rest110: {
+    id: 'rest110', name: 'Frankie & Johnny\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Dive bar seafood institution',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Frankie+and+Johnnys+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Frankie+and+Johnnys+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale', 'casual']
+  },
+  rest111: {
+    id: 'rest111', name: 'The Company Burger', hood: 'Freret', type: 'dinner',
+    desc: 'Grass-fed burgers and poutine',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=The+Company+Burger+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Company+Burger+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.94, lng: -90.105,
+    filters: ['casual']
+  },
+  rest112: {
+    id: 'rest112', name: 'Dat Dog', hood: 'Uptown', type: 'dinner',
+    desc: 'Gourmet hot dogs and craft beer',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Dat+Dog+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Dat+Dog+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest113: {
+    id: 'rest113', name: 'Doris Metropolitan', hood: 'CBD', type: 'dinner',
+    desc: 'Upscale steakhouse with butcher shop',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Doris+Metropolitan+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Doris+Metropolitan+New+Orleans',
+    tags: ['upscale', 'american'], lat: 29.9511, lng: -90.0715,
+    filters: ['upscale', 'casual']
+  },
+  rest114: {
+    id: 'rest114', name: 'Dickie Brennan\'s Steakhouse', hood: 'French Quarter', type: 'dinner',
+    desc: 'Premium aged beef and seafood',
+    costLabel: '$$$', costVal: 70, url: 'https://maps.google.com/?q=Dickie+Brennans+Steakhouse+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Dickie+Brennans+Steakhouse+New+Orleans',
+    tags: ['upscale', 'american'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'casual']
+  },
+  rest115: {
+    id: 'rest115', name: 'K-Paul\'s Louisiana Kitchen', hood: 'French Quarter', type: 'dinner',
+    desc: 'Cajun pioneer from Chef Paul Prudhomme',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=K+Pauls+Louisiana+Kitchen+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=K+Pauls+Louisiana+Kitchen+New+Orleans',
+    tags: ['cajun', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest116: {
+    id: 'rest116', name: 'Stanley', hood: 'French Quarter', type: 'dinner',
+    desc: 'All-day breakfast and brunch on Jackson Square',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Stanley+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Stanley+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest117: {
+    id: 'rest117', name: 'Acme Oyster House', hood: 'French Quarter', type: 'dinner',
+    desc: 'Touristy but reliable raw bar',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Acme+Oyster+House+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Acme+Oyster+House+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'casual']
+  },
+  rest118: {
+    id: 'rest118', name: 'Felix\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'Classic oyster house since 1940',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Felixs+Oyster+Bar+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Felixs+Oyster+Bar+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'casual']
+  },
+  rest119: {
+    id: 'rest119', name: 'Johnny\'s Po-Boys', hood: 'French Quarter', type: 'dinner',
+    desc: 'No-frills counter-service po-boys',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Johnnys+Po+Boys+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Johnnys+Po+Boys+New+Orleans',
+    tags: ['casual', 'creole'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual']
+  },
+  rest120: {
+    id: 'rest120', name: 'Central Grocery', hood: 'French Quarter', type: 'dinner',
+    desc: 'Birthplace of the muffuletta sandwich',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Central+Grocery+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Central+Grocery+New+Orleans',
+    tags: ['italian', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['romantic', 'casual']
+  },
+  rest121: {
+    id: 'rest121', name: 'Mother\'s Restaurant', hood: 'CBD', type: 'dinner',
+    desc: 'Famous for debris po-boys since 1938',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Mothers+Restaurant+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mothers+Restaurant+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9511, lng: -90.0715,
+    filters: ['casual']
+  },
+  rest122: {
+    id: 'rest122', name: 'Casamento\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Old-school oyster house (closed summer)',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Casamentos+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Casamentos+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale', 'casual']
+  },
+  rest123: {
+    id: 'rest123', name: 'Pascal\'s Manale', hood: 'Uptown', type: 'dinner',
+    desc: 'BBQ shrimp birthplace since 1913',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Pascals+Manale+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Pascals+Manale+New+Orleans',
+    tags: ['creole', 'seafood'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale']
+  },
+  rest124: {
+    id: 'rest124', name: 'Deanie\'s Seafood', hood: 'French Quarter', type: 'dinner',
+    desc: 'Casual seafood boils and po-boys',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Deanies+Seafood+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Deanies+Seafood+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'casual']
+  },
+  rest125: {
+    id: 'rest125', name: 'Cooter Brown\'s', hood: 'Uptown', type: 'dinner',
+    desc: 'Oyster bar with 400+ beers',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Cooter+Browns+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Cooter+Browns+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['upscale', 'casual']
+  },
+  rest126: {
+    id: 'rest126', name: 'Crabby Jack\'s', hood: 'French Quarter', type: 'dinner',
+    desc: 'Po-boys and seafood in laid-back setting',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Crabby+Jacks+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Crabby+Jacks+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9585, lng: -90.0643,
+    filters: ['upscale', 'casual']
+  },
+  rest127: {
+    id: 'rest127', name: 'The Ruby Slipper', hood: 'Mid-City', type: 'dinner',
+    desc: 'Weekend brunch with bottomless mimosas',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=The+Ruby+Slipper+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Ruby+Slipper+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest128: {
+    id: 'rest128', name: 'Surrey\'s Juice Bar', hood: 'Magazine Street', type: 'dinner',
+    desc: 'Healthy breakfast and brunch',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Surreys+Juice+Bar+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Surreys+Juice+Bar+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.928, lng: -90.09,
+    filters: ['casual']
+  },
+  rest129: {
+    id: 'rest129', name: 'Slim Goodies Diner', hood: 'Uptown', type: 'dinner',
+    desc: 'Funky breakfast spot with huge portions',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Slim+Goodies+Diner+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Slim+Goodies+Diner+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest130: {
+    id: 'rest130', name: 'Blue Oak BBQ', hood: 'Uptown', type: 'dinner',
+    desc: 'Texas-style barbecue',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Blue+Oak+BBQ+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Blue+Oak+BBQ+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest131: {
+    id: 'rest131', name: 'McClure\'s Barbecue', hood: 'Uptown', type: 'dinner',
+    desc: 'Memphis-style ribs and brisket',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=McClures+Barbecue+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=McClures+Barbecue+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest132: {
+    id: 'rest132', name: 'The Rum House', hood: 'French Quarter', type: 'dinner',
+    desc: 'Caribbean food and tropical drinks',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=The+Rum+House+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=The+Rum+House+New+Orleans',
+    tags: ['casual', 'romantic'], lat: 29.9585, lng: -90.0643,
+    filters: ['casual', 'romantic']
+  },
+  rest133: {
+    id: 'rest133', name: 'Seaworthy', hood: 'Warehouse District', type: 'dinner',
+    desc: 'Oyster bar from Peche team',
+    costLabel: '$$', costVal: 40, url: 'https://maps.google.com/?q=Seaworthy+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Seaworthy+New+Orleans',
+    tags: ['seafood', 'casual'], lat: 29.9465, lng: -90.073,
+    filters: ['upscale', 'casual']
+  },
+  rest134: {
+    id: 'rest134', name: 'Manolito', hood: 'Bywater', type: 'dinner',
+    desc: 'Cuban sandwiches and cocktails',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Manolito+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Manolito+New+Orleans',
+    tags: ['casual', 'outdoor'], lat: 29.9645, lng: -90.032,
+    filters: ['casual', 'outdoor']
+  },
+  rest135: {
+    id: 'rest135', name: 'Molly\'s Rise and Shine', hood: 'CBD', type: 'dinner',
+    desc: 'Irish breakfast and brunch',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Mollys+Rise+and+Shine+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Mollys+Rise+and+Shine+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9511, lng: -90.0715,
+    filters: ['casual']
+  },
+  rest136: {
+    id: 'rest136', name: 'Ruby Red\'s Bagels', hood: 'Uptown', type: 'dinner',
+    desc: 'Bagels and schmear, NY-style',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Ruby+Reds+Bagels+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Ruby+Reds+Bagels+New+Orleans',
+    tags: ['casual', 'american'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest137: {
+    id: 'rest137', name: 'District Donuts Sliders Brew', hood: 'Garden District', type: 'dinner',
+    desc: 'Creative donuts and Korean sliders',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=District+Donuts+Sliders+Brew+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=District+Donuts+Sliders+Brew+New+Orleans',
+    tags: ['american', 'asian'], lat: 29.9265, lng: -90.085,
+    filters: ['casual']
+  },
+  rest138: {
+    id: 'rest138', name: 'Wakin\' Bakin', hood: 'Mid-City', type: 'dinner',
+    desc: 'Boudin kolaches and breakfast',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Wakin+Bakin+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Wakin+Bakin+New+Orleans',
+    tags: ['cajun', 'casual'], lat: 29.968, lng: -90.095,
+    filters: ['casual']
+  },
+  rest139: {
+    id: 'rest139', name: 'Humble Bagel', hood: 'Uptown', type: 'dinner',
+    desc: 'Wood-fired bagels with creative toppings',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Humble+Bagel+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Humble+Bagel+New+Orleans',
+    tags: ['casual', 'american'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest140: {
+    id: 'rest140', name: 'Good Bird', hood: 'Uptown', type: 'dinner',
+    desc: 'Nashville hot chicken',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Good+Bird+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Good+Bird+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest141: {
+    id: 'rest141', name: 'Heard Dat Kitchen', hood: 'Uptown', type: 'dinner',
+    desc: 'Louisiana comfort food and soul food',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Heard+Dat+Kitchen+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Heard+Dat+Kitchen+New+Orleans',
+    tags: ['creole', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest142: {
+    id: 'rest142', name: 'Stein\'s Market & Deli', hood: 'Uptown', type: 'dinner',
+    desc: 'Jewish deli with house-made pastrami',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Steins+Market+and+Deli+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Steins+Market+and+Deli+New+Orleans',
+    tags: ['casual', 'american'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest143: {
+    id: 'rest143', name: 'Piece of Meat Uptown', hood: 'Uptown', type: 'dinner',
+    desc: 'Butcher shop with sandwiches',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Piece+of+Meat+Uptown+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Piece+of+Meat+Uptown+New+Orleans',
+    tags: ['american', 'casual'], lat: 29.9311, lng: -90.11,
+    filters: ['casual']
+  },
+  rest144: {
+    id: 'rest144', name: 'Morning Call', hood: 'Mid-City', type: 'dinner',
+    desc: 'Beignets and cafe au lait in City Park',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Morning+Call+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Morning+Call+New+Orleans',
+    tags: ['casual', 'outdoor'], lat: 29.968, lng: -90.095,
+    filters: ['casual', 'outdoor']
+  },
+  rest145: {
+    id: 'rest145', name: 'Pagoda Cafe', hood: 'St. Roch', type: 'dinner',
+    desc: 'Vietnamese-Creole breakfast and po-boys',
+    costLabel: '$', costVal: 20, url: 'https://maps.google.com/?q=Pagoda+Cafe+New+Orleans',
+    menuUrl: null, mapUrl: 'https://maps.google.com/?q=Pagoda+Cafe+New+Orleans',
+    tags: ['asian', 'creole'], lat: 29.972, lng: -90.055,
+    filters: ['casual']
+  }
+};
+
+const HIGHLIGHTS = {
+  act1: 'No cover charge before 9 PM on most nights',
+  act2: 'Open 24 hours - magical at 11 PM when crowds thin',
+  act3: 'Open Thursday-Sunday evenings, all artwork for sale',
+  act4: 'Three shows nightly, buy tickets online to skip line',
+  act5: 'Book tickets in advance for best availability',
+  act6: 'Free admission, open until dusk',
+  act7: 'Free and always open, best at sunset',
+  act8: '1.8 mile jogging path perfect for evening strolls',
+  act9: 'Check website for touring acts and local legends',
+  act10: 'Stunning city skyline views especially at sunset',
+  cof1: 'Great outdoor seating and local art on walls',
+  cof2: 'Multiple locations throughout the city',
+  cof3: 'Popular brunch spot on weekends',
+  cof4: 'The almond croissants sell out early',
+  cof5: 'The cold brew is exceptionally smooth',
+  cof6: 'Excellent pour-over options available',
+  lun1: 'The buckboard bacon is house-made',
+  lun2: 'Closed in summer months, cash preferred',
+  lun3: 'Expect a wait on weekends, worth it',
+  lun4: 'Cash only, arrive before noon for shorter lines',
+  lun5: 'Lunch menu more affordable than dinner',
+  lun6: '100% plant-based but appeals to all eaters',
+  lun7: 'The Cuban sandwich is exceptional',
+  lun8: 'The fried Gulf fish showcases local catch',
+  din1: 'Book 2-3 weeks in advance, tasting menu only',
+  din2: 'The gumbo changes daily, always excellent',
+  din3: 'Loud and lively, sit at bar to watch grill',
+  din4: 'Intimate space, book early for weekends',
+  din5: 'Reserve well in advance, jacket suggested',
+  din6: 'BYOB with no corkage fee',
+  din7: 'No reservations, expect a wait',
+  din8: 'Lovely patio for cooler evenings',
+  din9: 'The slow-roasted duck is legendary',
+  din10: 'The blue crab beignets are signature',
+  din11: 'Visit the rooftop bar before or after',
+  din12: 'Happy hour deals on oysters',
+  din13: 'Impeccable service for special occasions',
+  din14: 'Sunday jazz brunch is legendary',
+  drk1: 'Bar rotates every 15 minutes, try the Vieux Carré',
+  drk2: 'Art Deco interior is stunning',
+  drk3: 'Excellent jukebox, no TVs or blenders',
+  drk4: 'Champagne cocktails are the specialty',
+  drk5: 'Seasonal menu changes, make reservations',
+  drk6: 'Stunning sunset views, bring light jacket',
+  drk7: 'Live music every night, outdoor seating only',
+  drk8: 'All classics made perfectly',
+  drk9: 'Extensive European wine list',
+  drk10: 'Dog-friendly outdoor patio',
+  snk1: 'The torroncino is incredible',
+  snk2: 'The satsuma flavor is local favorite',
+  snk3: 'Open late for post-dinner treats',
+  snk4: 'Artistic presentations, Instagram-worthy',
+  snk5: 'Many dairy-free options available',
+  snk6: 'King cakes in season are legendary',
+  snk7: 'Croissants made fresh daily',
+  snk8: 'Honey butter biscuits are a local obsession'
+};
+
+function initFilters() {
+  const container = document.getElementById('filterChips');
+  container.innerHTML = FILTERS.map(f =>
+    `<div class="chip" data-filter="${f.id}" onclick="toggleFilter('${f.id}')">${f.label}</div>`
+  ).join('');
+}
+
+function toggleFilter(filterId) {
+  const chip = document.querySelector(`[data-filter="${filterId}"]`);
+  chip.classList.toggle('selected');
+  
+  const index = state.selectedFilters.indexOf(filterId);
+  if (index > -1) {
+    state.selectedFilters.splice(index, 1);
+  } else {
+    state.selectedFilters.push(filterId);
+  }
+  
+  // Refresh visible recommendations for all steps
+  state.steps.forEach(step => {
+    const allRecs = filterRecsForStep(step);
+    step.visibleRecs = allRecs.slice(0, 6);
+  });
+  
+  renderSteps();
+}
+
+document.getElementById('budgetSlider').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value);
+  state.budgetMax = val;
+  document.getElementById('budgetMax').textContent = `$${val}`;
+  const pct = ((val - 100) / (1000 - 100)) * 100;
+  e.target.style.background = `linear-gradient(to right, var(--rust) 0%, var(--rust) ${pct}%, rgba(26,22,18,0.08) ${pct}%)`;
+  updateTrackers();
+});
+
+function initSteps() {
+  // Add 3 default steps: Coffee, Dinner, Activity
+  state.steps.push({
+    id: state.nextStepId++,
+    type: 'coffee',
+    duration: 45,
+    selectedItem: null,
+    planB: null,
+    showPlanBPrompt: false,
+    showPlanBCarousel: false,
+    expanded: true,
+    visibleRecs: [],
+    visiblePlanBRecs: []
+  });
+  state.steps.push({
+    id: state.nextStepId++,
+    type: 'dinner',
+    duration: 120,
+    selectedItem: null,
+    planB: null,
+    showPlanBPrompt: false,
+    showPlanBCarousel: false,
+    expanded: true,
+    visibleRecs: [],
+    visiblePlanBRecs: []
+  });
+  state.steps.push({
+    id: state.nextStepId++,
+    type: 'activity',
+    duration: 120,
+    selectedItem: null,
+    planB: null,
+    showPlanBPrompt: false,
+    showPlanBCarousel: false,
+    expanded: true,
+    visibleRecs: [],
+    visiblePlanBRecs: []
+  });
+  renderSteps();
+}
+
+function addStep() {
+  if (state.steps.length >= 5) {
+    showToast('Maximum 5 steps allowed');
+    return;
+  }
+  state.steps.push({
+    id: state.nextStepId++,
+    type: 'dinner',
+    duration: 120,
+    selectedItem: null,
+    planB: null,
+    showPlanBPrompt: false,
+    showPlanBCarousel: false,
+    expanded: true,
+    visibleRecs: [],
+    visiblePlanBRecs: []
+  });
+  renderSteps();
+  updateTrackers();
+}
+
+function deleteStep(stepId) {
+  if (state.steps.length === 1) {
+    showToast('You need at least one step');
+    return;
+  }
+  state.steps = state.steps.filter(s => s.id !== stepId);
+  renderSteps();
+  updateTrackers();
+}
+
+function clearStep(stepId) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    step.selectedItem = null;
+    step.planB = null;
+    step.showPlanBPrompt = false;
+    step.showPlanBCarousel = false;
+    renderSteps();
+    updateTrackers();
+  }
+}
+
+function changeStepType(stepId, newType) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    step.type = newType;
+    step.duration = STEP_TYPES[newType].defaultDuration;
+    step.selectedItem = null;
+    step.visibleRecs = [];
+    renderSteps();
+  }
+}
+
+function toggleStep(stepId) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    step.expanded = !step.expanded;
+    renderSteps();
+  }
+}
+
+function updateStepDuration(stepId, duration) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    step.duration = parseInt(duration) || 0;
+    updateTrackers();
+  }
+}
+
+function moveStepUp(stepId) {
+  const index = state.steps.findIndex(s => s.id === stepId);
+  if (index > 0) {
+    [state.steps[index - 1], state.steps[index]] = [state.steps[index], state.steps[index - 1]];
+    renderSteps();
+  }
+}
+
+function moveStepDown(stepId) {
+  const index = state.steps.findIndex(s => s.id === stepId);
+  if (index < state.steps.length - 1) {
+    [state.steps[index], state.steps[index + 1]] = [state.steps[index + 1], state.steps[index]];
+    renderSteps();
+  }
+}
+
+// Drag and drop handlers
+let draggedStepId = null;
+
+function handleDragStart(event, stepId) {
+  draggedStepId = stepId;
+  event.currentTarget.classList.add('dragging');
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/html', event.currentTarget.innerHTML);
+}
+
+function handleDragOver(event) {
+  if (event.preventDefault) {
+    event.preventDefault();
+  }
+  event.dataTransfer.dropEffect = 'move';
+  return false;
+}
+
+function handleDragEnter(event) {
+  if (draggedStepId !== null) {
+    event.currentTarget.classList.add('drag-over');
+  }
+}
+
+function handleDragLeave(event) {
+  event.currentTarget.classList.remove('drag-over');
+}
+
+function handleDrop(event, targetStepId) {
+  if (event.stopPropagation) {
+    event.stopPropagation();
+  }
+  event.preventDefault();
+  
+  event.currentTarget.classList.remove('drag-over');
+  
+  if (draggedStepId !== null && draggedStepId !== targetStepId) {
+    const draggedIndex = state.steps.findIndex(s => s.id === draggedStepId);
+    const targetIndex = state.steps.findIndex(s => s.id === targetStepId);
+    
+    if (draggedIndex !== -1 && targetIndex !== -1) {
+      const draggedStep = state.steps[draggedIndex];
+      state.steps.splice(draggedIndex, 1);
+      state.steps.splice(targetIndex, 0, draggedStep);
+      renderSteps();
+      updateTrackers();
+    }
+  }
+  
+  return false;
+}
+
+function handleDragEnd(event) {
+  event.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.step-wrapper').forEach(el => {
+    el.classList.remove('drag-over');
+  });
+  draggedStepId = null;
+}
+
+function filterRecsForStep(step) {
+  const allRecs = Object.values(RECS);
+  let filtered = allRecs.filter(rec => rec.type === step.type);
+  
+  if (state.selectedFilters.length > 0) {
+    filtered = filtered.filter(rec => {
+      if (!rec.filters || rec.filters.length === 0) return false;
+      return state.selectedFilters.every(filter => rec.filters.includes(filter));
+    });
+  }
+  
+  return filtered;
+}
+
+function shuffleStep(stepId) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    const allRecs = filterRecsForStep(step);
+    const shuffled = [...allRecs].sort(() => Math.random() - 0.5);
+    step.visibleRecs = shuffled.slice(0, 6);
+    renderSteps();
+  }
+}
+
+function selectRec(stepId, recId) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    step.selectedItem = recId ? RECS[recId] : null;
+    // Show Plan B prompt after Plan A selection
+    if (recId) {
+      step.showPlanBPrompt = true;
+    }
+    renderSteps();
+    updateTrackers();
+  }
+}
+
+function showPlanBCarousel(stepId) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    step.showPlanBPrompt = false;
+    step.showPlanBCarousel = true;
+    
+    // Initialize Plan B recommendations
+    if (step.visiblePlanBRecs.length === 0) {
+      const allRecs = filterRecsForStep(step);
+      // Get different recommendations than main selection
+      const mainRecIds = step.visibleRecs.map(r => r.id);
+      const planBRecs = allRecs.filter(r => !mainRecIds.includes(r.id));
+      step.visiblePlanBRecs = planBRecs; // Show ALL
+    }
+    
+    renderSteps();
+  }
+}
+
+function selectPlanB(stepId, recId) {
+  const step = state.steps.find(s => s.id === stepId);
+  if (step) {
+    step.planB = recId ? RECS[recId] : null;
+    
+    // Auto-collapse and move to next step after Plan B selection
+    if (recId) {
+      step.expanded = false;
+      step.showPlanBCarousel = false;
+      renderSteps();
+      updateTrackers();
+      
+      // Scroll to next step
+      const currentIndex = state.steps.findIndex(s => s.id === stepId);
+      if (currentIndex < state.steps.length - 1) {
+        setTimeout(() => {
+          const nextStep = state.steps[currentIndex + 1];
+          const nextStepEl = document.querySelector(`[data-step-id="${nextStep.id}"]`);
+          if (nextStepEl) {
+            nextStepEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+      }
+    } else {
+      renderSteps();
+    }
+  }
+}
+
+// ============================================
+// MAPBOX DIRECTIONS API FUNCTIONS
+// ============================================
+
+/**
+ * Show routing status to user
+ */
+function updateRoutingStatus(status, message) {
+  const statusEl = document.getElementById('routingStatus');
+  const textEl = document.getElementById('routingStatusText');
+  const ledEl = document.getElementById('mapLed');
+  
+  if (!statusEl || !textEl) return;
+  
+  statusEl.style.display = 'flex';
+  statusEl.className = 'routing-status ' + status;
+  textEl.textContent = message;
+  
+  // Update LED indicator
+  if (ledEl) {
+    if (status === 'success') {
+      ledEl.classList.add('connected');
+      state.mapConnected = true;
+    } else {
+      ledEl.classList.remove('connected');
+      state.mapConnected = false;
+    }
+  }
+  
+  // Auto-hide success/error after 3 seconds
+  if (status === 'success' || status === 'error') {
+    setTimeout(() => {
+      statusEl.style.display = 'none';
+    }, 3000);
+  }
+}
+
+/**
+ * Get driving directions from Mapbox API
+ * @param {Array} coordinates - Array of [lng, lat] pairs
+ * @returns {Promise<Object>} - { distance: miles, duration: minutes, method: string }
+ */
+async function getMapboxDirections(coordinates) {
+  if (!MAPBOX_API_KEY || MAPBOX_API_KEY === 'YOUR_MAPBOX_API_KEY_HERE') {
+    updateRoutingStatus('error', 'Mapbox API key not configured - using estimates');
+    return estimateFallbackDistance(coordinates);
+  }
+  
+  // Build coordinates string: lng,lat;lng,lat;...
+  const coordsString = coordinates.map(c => `${c[0]},${c[1]}`).join(';');
+  
+  // Build cache key
+  const cacheKey = coordsString;
+  
+  // Check cache first
+  if (state.travelTimeCache[cacheKey]) {
+    updateRoutingStatus('success', 'Using cached route data');
+    return state.travelTimeCache[cacheKey];
+  }
+  
+  updateRoutingStatus('loading', 'Calculating driving routes...');
+  
+  const url = `${MAPBOX_DIRECTIONS_URL}/${coordsString}?access_token=${MAPBOX_API_KEY}&geometries=geojson&overview=full`;
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Mapbox API error:', response.status, errorText);
+      throw new Error(`Mapbox API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.routes || data.routes.length === 0) {
+      throw new Error('No route found');
+    }
+    
+    const route = data.routes[0];
+    const distanceMiles = (route.distance * 0.000621371); // meters to miles
+    const durationMinutes = Math.round(route.duration / 60); // seconds to minutes
+    
+    const result = {
+      distance: distanceMiles,
+      duration: durationMinutes,
+      method: 'mapbox'
+    };
+    
+    // Cache the result
+    state.travelTimeCache[cacheKey] = result;
+    
+    updateRoutingStatus('success', `✓ Real driving routes calculated (${distanceMiles.toFixed(1)} mi)`);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('Mapbox API call failed:', error);
+    updateRoutingStatus('error', 'Mapbox unavailable - using distance estimates');
+    return estimateFallbackDistance(coordinates);
+  }
+}
+
+/**
+ * Fallback distance estimation using Haversine formula
+ * Used when API key is not configured or API call fails
+ */
+function estimateFallbackDistance(coordinates) {
+  let totalDistance = 0;
+  
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    const [lon1, lat1] = coordinates[i];
+    const [lon2, lat2] = coordinates[i + 1];
+    
+    const R = 3959; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const distance = R * c;
+    
+    totalDistance += distance;
+  }
+  
+  // Estimate driving time: assume 15 mph average city speed + 10 min per stop for parking
+  const durationMinutes = Math.round((totalDistance / 15) * 60) + (10 * (coordinates.length - 1));
+  
+  return {
+    distance: totalDistance,
+    duration: Math.max(15 * (coordinates.length - 1), durationMinutes),
+    method: 'estimated'
+  };
+}
+
+/**
+ * Calculate total travel time using Mapbox Directions API
+ * @returns {Promise<number>} - Total travel time in minutes
+ */
+async function calculateTravelTime() {
+  const selectedSteps = state.steps.filter(s => s.selectedItem);
+  
+  if (selectedSteps.length === 0) {
+    return 0;
+  }
+  
+  // Build coordinates array: [home, step1, step2, ..., home]
+  const coordinates = [];
+  
+  // Add starting location (will need to geocode this - for now use French Quarter center)
+  // TODO: Geocode state.startLocation
+  coordinates.push([-90.0715, 29.9511]); // French Quarter center as default
+  
+  // Add each selected step's location
+  selectedSteps.forEach(step => {
+    if (step.selectedItem && step.selectedItem.lng && step.selectedItem.lat) {
+      coordinates.push([step.selectedItem.lng, step.selectedItem.lat]);
+    }
+  });
+  
+  // Add return to home
+  coordinates.push([-90.0715, 29.9511]); // Return to starting point
+  
+  if (coordinates.length < 2) {
+    return 0;
+  }
+  
+  try {
+    const result = await getMapboxDirections(coordinates);
+    return result.duration;
+  } catch (error) {
+    console.error('Error calculating travel time:', error);
+    return 0;
+  }
+}
+
+/**
+ * Calculate distance between two points for display purposes
+ * Uses simple straight-line distance
+ */
+function calculateSimpleDistance(lat1, lon1, lat2, lon2) {
+  const R = 3959; // Earth radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+function calculateTotalCost() {
+  return state.steps
+    .filter(s => s.selectedItem)
+    .reduce((sum, s) => sum + s.selectedItem.costVal, 0);
+}
+
+async function updateTrackers() {
+  const travelTime = await calculateTravelTime();
+  const totalCost = calculateTotalCost();
+  const selectedSteps = state.steps.filter(s => s.selectedItem);
+  
+  // Calculate total duration (all step durations + travel time)
+  const totalStepDuration = state.steps.reduce((sum, s) => sum + s.duration, 0);
+  const totalTimeMinutes = totalStepDuration + travelTime;
+  const totalHours = Math.floor(totalTimeMinutes / 60);
+  const totalMins = totalTimeMinutes % 60;
+  
+  // Get start and end times
+  const startTime = document.getElementById('startTime').value;
+  const endTime = document.getElementById('endTime').value;
+  state.startLocation = document.getElementById('startLocation').value;
+  
+  // Calculate key times
+  let leaveHomeTime = format12Hour(startTime);
+  let arriveFirstTime = '--:--';
+  let leaveLastTime = '--:--';
+  let arriveHomeTime = format12Hour(endTime);
+  
+  if (selectedSteps.length > 0) {
+    // Calculate arrive at first stop (start time + travel to first)
+    const minutesToFirst = 15; // Default estimate
+    arriveFirstTime = format12Hour(addMinutes(startTime, minutesToFirst));
+    
+    // Calculate leave last stop (work backwards from home time)
+    const minutesFromLast = 15; // Default estimate
+    leaveLastTime = format12Hour(subtractMinutes(endTime, minutesFromLast));
+  }
+  
+  // Update all sticky tracker fields
+  document.getElementById('stickyCost').textContent = `$${totalCost}`;
+  document.getElementById('stickyTimeAway').textContent = `${totalHours}h ${totalMins}m`;
+  document.getElementById('stickyDriveTime').textContent = `${travelTime} min`;
+  document.getElementById('stickyLeave').textContent = leaveHomeTime;
+  document.getElementById('stickyArriveFirst').textContent = arriveFirstTime;
+  document.getElementById('stickyLeaveLast').textContent = leaveLastTime;
+  document.getElementById('stickyArriveHome').textContent = arriveHomeTime;
+  
+  // Update old travel tracker if it exists
+  const travelEl = document.getElementById('travelTime');
+  if (travelEl) {
+    travelEl.textContent = `${travelTime} min`;
+  }
+}
+
+// Helper function to convert 24-hour time to 12-hour format with AM/PM
+function format12Hour(timeStr) {
+  const [hours, mins] = timeStr.split(':').map(Number);
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${String(mins).padStart(2, '0')} ${period}`;
+}
+
+// Helper function to subtract minutes from a time string (HH:MM format)
+function subtractMinutes(timeStr, minutes) {
+  const [hours, mins] = timeStr.split(':').map(Number);
+  const totalMins = hours * 60 + mins;
+  const newTotalMins = totalMins - minutes;
+  const newHours = Math.floor(newTotalMins / 60) % 24;
+  const newMins = newTotalMins % 60;
+  return `${String(newHours).padStart(2, '0')}:${String(newMins).padStart(2, '0')}`;
+}
+
+// Helper function to add minutes to a time string (HH:MM format)
+function addMinutes(timeStr, minutes) {
+  const [hours, mins] = timeStr.split(':').map(Number);
+  const totalMins = hours * 60 + mins;
+  const newTotalMins = totalMins + minutes;
+  const newHours = Math.floor(newTotalMins / 60) % 24;
+  const newMins = newTotalMins % 60;
+  return `${String(newHours).padStart(2, '0')}:${String(newMins).padStart(2, '0')}`;
+}
+
+function renderSteps() {
+  const container = document.getElementById('stepsContainer');
+  
+  container.innerHTML = state.steps.map((step, index) => {
+    const config = STEP_TYPES[step.type];
+    const expandIcon = step.expanded ? '▼' : '▶';
+    
+    if (step.visibleRecs.length === 0) {
+      const allRecs = filterRecsForStep(step);
+      step.visibleRecs = allRecs.slice(0, 6);
+    }
+    
+    // Calculate drive time to next step
+    let driveTimeHTML = '';
+    if (index < state.steps.length - 1) {
+      const nextStep = state.steps[index + 1];
+      if (step.selectedItem && nextStep.selectedItem && 
+          step.selectedItem.lat && step.selectedItem.lng &&
+          nextStep.selectedItem.lat && nextStep.selectedItem.lng) {
+        const distance = calculateSimpleDistance(
+          step.selectedItem.lat, step.selectedItem.lng,
+          nextStep.selectedItem.lat, nextStep.selectedItem.lng
+        );
+        const minutes = Math.round((distance / 15) * 60) + 10;
+        const displayMinutes = Math.max(15, minutes);
+        driveTimeHTML = `
+          <div style="margin: 12px 0; padding: 8px 16px; background: var(--rust-pale); border-left: 3px solid var(--rust); font-size: 11px; color: var(--rust); letter-spacing: 0.05em;">
+            ↓ ${displayMinutes} min drive to next stop
+          </div>
+        `;
+      }
+    }
+    
+    return `
+      <div class="step-wrapper ${step.expanded ? 'expanded' : ''}" 
+           data-step-id="${step.id}">
+        <div class="step-header" onclick="toggleStep(${step.id})">
+          <span class="step-drag-handle">⋮⋮</span>
+          
+          <div class="step-info-wrap">
+            <div class="step-number">Step ${index + 1}</div>
+            
+            ${step.selectedItem && !step.expanded ? `
+              <div style="font-size: 13px; font-weight: 500; color: var(--ink); margin-left: 12px;">
+                ${step.selectedItem.name} ${step.planB ? '+ Plan B' : ''}
+              </div>
+            ` : ''}
+            
+            <div class="step-type-selector">
+              <span class="step-type-label">Type:</span>
+              <select class="step-type-select" onchange="changeStepType(${step.id}, this.value)" onclick="event.stopPropagation()">
+                ${Object.entries(STEP_TYPES).map(([key, val]) =>
+                  `<option value="${key}" ${step.type === key ? 'selected' : ''}>${val.label}</option>`
+                ).join('')}
+              </select>
+            </div>
+            
+            <div class="step-duration-input">
+              <label>Duration:</label>
+              <input type="number" value="${step.duration}" min="15" max="300" step="15"
+                onchange="updateStepDuration(${step.id}, this.value)" onclick="event.stopPropagation()"> min
+            </div>
+          </div>
+          
+          <div class="step-controls-wrap">
+            <div class="step-controls">
+              ${index > 0 ? `<button class="step-btn" onclick="event.stopPropagation(); moveStepUp(${step.id})">↑</button>` : ''}
+              ${index < state.steps.length - 1 ? `<button class="step-btn" onclick="event.stopPropagation(); moveStepDown(${step.id})">↓</button>` : ''}
+              <button class="step-btn" onclick="event.stopPropagation(); clearStep(${step.id})">Clear</button>
+              <button class="step-btn delete" onclick="event.stopPropagation(); deleteStep(${step.id})">Delete</button>
+            </div>
+          </div>
+          
+          <span class="step-expand-icon">${expandIcon}</span>
+        </div>
+        
+        <div class="step-content">
+          <div class="step-body">
+            ${step.selectedItem ? `
+              <div class="step-selected-item">
+                <div class="step-selected-name">Plan A: ${step.selectedItem.name}</div>
+                <div class="step-selected-details">
+                  ${step.selectedItem.hood} · ${step.selectedItem.costLabel}
+                </div>
+                <div class="step-selected-links">
+                  ${step.selectedItem.url ? `<a href="${step.selectedItem.url}" target="_blank" class="step-selected-link">Website</a>` : ''}
+                  ${step.selectedItem.menuUrl ? `<a href="${step.selectedItem.menuUrl}" target="_blank" class="step-selected-link">Menu</a>` : ''}
+                  <a href="${step.selectedItem.mapUrl}" target="_blank" class="step-selected-link">Directions</a>
+                  <button class="step-selected-link" style="cursor:pointer;" onclick="selectRec(${step.id}, null)">Change</button>
+                </div>
+              </div>
+            ` : ''}
+            
+            ${!step.selectedItem || step.showPlanBPrompt || step.showPlanBCarousel ? `
+              <button class="step-shuffle-btn" onclick="shuffleStep(${step.id})">
+                Shuffle Suggestions
+              </button>
+              
+              <div class="recs-grid">
+                ${step.visibleRecs.map(rec => `
+                  <div class="rec-card ${step.selectedItem && step.selectedItem.id === rec.id ? 'selected' : ''}"
+                    onclick="selectRec(${step.id}, '${rec.id}')">
+                    <div class="rec-name">${rec.name}</div>
+                    <div class="rec-sub">${rec.hood} · ${rec.costLabel}</div>
+                    <div class="rec-desc">${rec.desc}</div>
+                    <div class="rec-tags">
+                      ${(rec.tags || []).slice(0, 3).map((tag, ti) => {
+                        const tagClass = ['tag-rust', 'tag-sage', 'tag-gold'][ti % 3];
+                        return `<span class="rec-tag ${tagClass}">${tag}</span>`;
+                      }).join('')}
+                    </div>
+                    <div class="rec-links">
+                      ${rec.url ? `<a href="${rec.url}" target="_blank" class="rec-link" onclick="event.stopPropagation()">Website</a>` : ''}
+                      ${rec.menuUrl ? `<a href="${rec.menuUrl}" target="_blank" class="rec-link" onclick="event.stopPropagation()">Menu</a>` : ''}
+                      <a href="${rec.mapUrl}" target="_blank" class="rec-link" onclick="event.stopPropagation()">Map</a>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+            
+            ${step.showPlanBPrompt ? `
+              <div class="plan-b-prompt">
+                <div class="plan-b-prompt-text">Now select your Plan B option!</div>
+                <div class="plan-b-prompt-sub">Hey, you never know!</div>
+                <button class="plan-b-prompt-btn" onclick="showPlanBCarousel(${step.id})">
+                  Select Plan B Option
+                </button>
+              </div>
+            ` : ''}
+            
+            ${step.showPlanBCarousel ? `
+              <div class="plan-b-section">
+                <div class="plan-b-label">Plan B - Backup Option</div>
+                
+                ${step.planB ? `
+                  <div class="step-selected-item">
+                    <div class="step-selected-name">Plan B: ${step.planB.name}</div>
+                    <div class="step-selected-details">
+                      ${step.planB.hood} · ${step.planB.costLabel}
+                    </div>
+                    <div class="step-selected-links">
+                      ${step.planB.url ? `<a href="${step.planB.url}" target="_blank" class="step-selected-link">Website</a>` : ''}
+                      ${step.planB.menuUrl ? `<a href="${step.planB.menuUrl}" target="_blank" class="step-selected-link">Menu</a>` : ''}
+                      <a href="${step.planB.mapUrl}" target="_blank" class="step-selected-link">Directions</a>
+                      <button class="step-selected-link" style="cursor:pointer;" onclick="selectPlanB(${step.id}, null)">Change</button>
+                    </div>
+                  </div>
+                ` : ''}
+                
+                <div class="recs-grid">
+                  ${step.visiblePlanBRecs.map(rec => `
+                    <div class="rec-card ${step.planB && step.planB.id === rec.id ? 'selected' : ''}"
+                      onclick="selectPlanB(${step.id}, '${rec.id}')">
+                      <div class="rec-name">${rec.name}</div>
+                      <div class="rec-sub">${rec.hood} · ${rec.costLabel}</div>
+                      <div class="rec-desc">${rec.desc}</div>
+                      <div class="rec-tags">
+                        ${(rec.tags || []).slice(0, 3).map((tag, ti) => {
+                          const tagClass = ['tag-rust', 'tag-sage', 'tag-gold'][ti % 3];
+                          return `<span class="rec-tag ${tagClass}">${tag}</span>`;
+                        }).join('')}
+                      </div>
+                      <div class="rec-links">
+                        ${rec.url ? `<a href="${rec.url}" target="_blank" class="rec-link" onclick="event.stopPropagation()">Website</a>` : ''}
+                        ${rec.menuUrl ? `<a href="${rec.menuUrl}" target="_blank" class="rec-link" onclick="event.stopPropagation()">Menu</a>` : ''}
+                        <a href="${rec.mapUrl}" target="_blank" class="rec-link" onclick="event.stopPropagation()">Map</a>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+      ${driveTimeHTML}
+    `;
+  }).join('');
+}
+
+
+async function showFinal() {
+  const selectedSteps = state.steps.filter(s => s.selectedItem);
+  
+  if (selectedSteps.length === 0) {
+    showToast('Please select at least one option');
+    return;
+  }
+  
+  document.getElementById('screen-main').style.display = 'none';
+  const fin = document.getElementById('screen-final');
+  fin.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
+  const totalCost = calculateTotalCost();
+  const travelTime = await calculateTravelTime();
+  const hoods = [...new Set(selectedSteps.map(s => s.selectedItem.hood))];
+  
+  document.getElementById('itinerary-cost').textContent = `$${totalCost}`;
+  document.getElementById('itinerary-neighborhoods').textContent = hoods.join(' · ');
+  document.getElementById('itinerary-travel').textContent = `${travelTime} min travel`;
+  
+  const SVG_WEB = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+  const SVG_MAP = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`;
+  const SVG_MENU = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/></svg>`;
+  const SVG_CAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+  
+  const stopsHTML = selectedSteps.map((step, i) => {
+    const item = step.selectedItem;
+    const isLast = i === selectedSteps.length - 1;
+    const config = STEP_TYPES[step.type];
+    
+    const tagClasses = ['tag-rust', 'tag-sage', 'tag-gold', 'tag-muted'];
+    const tagsHTML = (item.tags || []).slice(0, 4).map((t, ti) =>
+      `<span class="it-tag ${tagClasses[ti % 4]}">${t}</span>`).join('');
+    
+    const hl = HIGHLIGHTS[item.id] || '';
+    
+    let travelTimeHTML = '';
+    if (!isLast && selectedSteps[i + 1]) {
+      const nextItem = selectedSteps[i + 1].selectedItem;
+      if (item.lat && item.lng && nextItem.lat && nextItem.lng) {
+        const distance = calculateSimpleDistance(item.lat, item.lng, nextItem.lat, nextItem.lng);
+        const minutes = Math.round((distance / 15) * 60) + 10; // 15 mph + 10 min parking
+        const displayMinutes = Math.max(15, minutes);
+        travelTimeHTML = `
+          <div class="it-travel-time">
+            ${SVG_CAR} ${displayMinutes} min drive to next stop
+          </div>
+        `;
+      }
+    }
+    
+    return `
+      <div class="it-stop${isLast ? ' it-stop-last' : ''}">
+        <div class="it-time">
+          <div class="it-time-main">${step.duration}</div>
+          <div class="it-time-ampm">min</div>
+        </div>
+        <div class="it-connector">
+          <div class="it-dot"></div>
+          ${isLast ? '' : '<div class="it-line"></div>'}
+        </div>
+        <div class="it-body">
+          <div class="it-num">Stop ${i + 1} &nbsp;·&nbsp; ${config.label}</div>
+          <div class="it-name">${item.name}</div>
+          <div class="it-sub">${item.hood} &nbsp;·&nbsp; ${item.costLabel}</div>
+          <div class="it-desc">${item.desc}</div>
+          ${hl ? `<div class="it-note">— ${hl}</div>` : ''}
+          <div class="it-tags">
+            ${tagsHTML}
+            <span class="it-tag tag-gold">${item.costLabel}</span>
+          </div>
+          <div class="it-links">
+            ${item.url ? `<a class="it-btn it-btn-web" href="${item.url}" target="_blank" rel="noopener">${SVG_WEB} Website</a>` : ''}
+            ${item.menuUrl ? `<a class="it-btn it-btn-map" href="${item.menuUrl}" target="_blank" rel="noopener">${SVG_MENU} Menu</a>` : ''}
+            <a class="it-btn it-btn-dir" href="${item.mapUrl}" target="_blank" rel="noopener">${SVG_MAP} Directions</a>
+          </div>
+          ${travelTimeHTML}
+        </div>
+      </div>`;
+  }).join('');
+  
+  document.getElementById('itinerary-stops').innerHTML = stopsHTML;
+  
+  const pct = Math.min((totalCost / state.budgetMax) * 100, 100);
+  document.getElementById('itinerary-costs').innerHTML = `
+    ${selectedSteps.map((step, i) => {
+      const config = STEP_TYPES[step.type];
+      return `
+        <div class="cost-row">
+          <span class="cost-row-label">${config.label} — ${step.selectedItem.name}</span>
+          <span class="cost-row-val">${step.selectedItem.costLabel}</span>
+        </div>`;
+    }).join('')}
+    <div class="cost-row cost-row-total">
+      <span class="cost-row-label">Total estimated</span>
+      <span class="cost-row-val">$${totalCost}</span>
+    </div>
+    <div class="cost-bar-outer"><div class="cost-bar-inner" style="width:${pct}%"></div></div>
+    <div class="cost-bar-labels"><span>$0</span><span>Budget cap: $${state.budgetMax}</span></div>`;
+}
+
+function downloadPDF() {
+  const totalCost = calculateTotalCost();
+  const travelTime = calculateTravelTime();
+  const selectedSteps = state.steps.filter(s => s.selectedItem);
+  
+  const lines = [];
+  lines.push('YOUR NEW ORLEANS DATE NIGHT PLAN');
+  lines.push('================================');
+  lines.push('');
+  lines.push(`Total Estimated Cost for Two: $${totalCost}`);
+  lines.push(`Total Travel Time: ${travelTime} minutes`);
+  lines.push('');
+  
+  selectedSteps.forEach((step, i) => {
+    const item = step.selectedItem;
+    const config = STEP_TYPES[step.type];
+    lines.push(`STOP ${i + 1} — ${config.label.toUpperCase()} (${step.duration} min)`);
+    lines.push(`${item.name} (${item.hood})`);
+    lines.push(`Estimated Cost: ${item.costLabel}`);
+    lines.push('');
+    lines.push(item.desc);
+    lines.push('');
+    if (item.url) lines.push(`Website: ${item.url}`);
+    if (item.menuUrl) lines.push(`Menu: ${item.menuUrl}`);
+    lines.push(`Map: ${item.mapUrl}`);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  });
+  
+  lines.push('Generated by the New Orleans Date Night Planner');
+  
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'NOLA_Date_Night_Plan.txt';
+  a.click();
+  showToast('📄 Itinerary downloaded!');
+}
+
+function copyToClipboard() {
+  const totalCost = calculateTotalCost();
+  const selectedSteps = state.steps.filter(s => s.selectedItem);
+  
+  const parts = ['🌙 MY NEW ORLEANS DATE NIGHT PLAN', `Total: ~$${totalCost} for two`, ''];
+  selectedSteps.forEach((step, i) => {
+    const item = step.selectedItem;
+    const config = STEP_TYPES[step.type];
+    parts.push(`Stop ${i + 1}: ${config.label} — ${step.duration} min`);
+    parts.push(`${item.name} · ${item.hood} · ${item.costLabel}`);
+    if (item.url) parts.push(item.url);
+    parts.push('');
+  });
+  
+  navigator.clipboard.writeText(parts.join('\n')).then(() => {
+    showToast('📋 Copied to clipboard!');
+  });
+}
+
+function resetPlanner() {
+  state = {
+    steps: [],
+    nextStepId: 1,
+    selectedFilters: [],
+    budgetMax: 500
+  };
+  
+  document.getElementById('screen-final').classList.remove('active');
+  document.getElementById('screen-main').style.display = '';
+  
+  const sliderEl = document.getElementById('budgetSlider');
+  sliderEl.value = 500;
+  sliderEl.style.background = 'linear-gradient(to right, var(--rust) 0%, var(--rust) 100%, rgba(26,22,18,0.08) 100%)';
+  document.getElementById('budgetMax').textContent = '$500';
+  document.getElementById('travelTime').textContent = '0 min';
+  
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  
+  initSteps();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+initFilters();
+initSteps();
+updateTrackers();
+</script>
+</body>
+</html>
